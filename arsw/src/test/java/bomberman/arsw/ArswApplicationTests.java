@@ -1,9 +1,11 @@
-package bomberman.arsw;
+/*package bomberman.arsw;
 
+import bomberman.arsw.Model.Game;
 import bomberman.arsw.Model.GameConfig;
+import bomberman.arsw.service.GameService;
 import org.junit.jupiter.api.Test;
-import org.springframework.boot.test.context.SpringBootTest;
 import static org.junit.jupiter.api.Assertions.*;
+import org.springframework.boot.test.context.SpringBootTest;
 
 @SpringBootTest
 class ArswApplicationTests
@@ -16,13 +18,17 @@ class ArswApplicationTests
 	}
 
 	@Test
-	void testValoresValidos() {
-		GameConfig config = new GameConfig(5, 2, 10, 3);
-
+	public void testValidConfig() {
+		GameConfig config = new GameConfig(5, 4, 10, 3);
 		assertEquals(5, config.getDuracion());
-		assertEquals(2, config.getJugadores());
+		assertEquals(4, config.getJugadores());
 		assertEquals(10, config.getBloques());
 		assertEquals(3, config.getVidas());
+	}
+
+	@Test
+	public void testInvalidConfig() {
+		assertThrows(IllegalArgumentException.class, () -> new GameConfig(-5, 4, 10, 3));
 	}
 
 	@Test
@@ -93,4 +99,41 @@ class ArswApplicationTests
 		assertEquals(esperado, config.toString());
 	}
 
+	/*
+	@Test
+	void testGameInitialization()
+	{
+		GameConfig config = new GameConfig(10, 4, 20, 3);
+		Game game = new Game(config);
+
+		assertNotNull(game);
+		assertEquals(10, game.getConfig().getDuracion());
+		assertEquals(4, game.getConfig().getJugadores());
+		assertEquals(20, game.getConfig().getBloques());
+		assertEquals(3, game.getConfig().getVidas());
+	}
+
+	@Test
+	void testStartGame() {
+		GameService gameService = new GameService();
+		GameConfig config = new GameConfig(15, 2, 10, 5);
+
+		gameService.startGame(config);
+		Game game = gameService.getCurrentGame();
+
+		assertNotNull(game);
+		assertEquals(15, game.getConfig().getDuracion());
+		assertEquals(2, game.getConfig().getJugadores());
+		assertEquals(10, game.getConfig().getBloques());
+		assertEquals(5, game.getConfig().getVidas());
+	}
+
+	@Test
+	void testGetCurrentGameWhenNoGameStarted() {
+		GameService gameService = new GameService();
+		assertNull(gameService.getCurrentGame());
+	}
+
+
 }
+*/

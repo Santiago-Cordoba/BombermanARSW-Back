@@ -16,4 +16,32 @@ public class Cell {
         player = null;
         powerUp = null;
     }
+
+    public boolean isEmpty() {
+        return wall == null && bomb == null && player == null && powerUp == null;
+    }
+
+    public void setBlock(boolean b) {
+        if (b) {
+            this.wall = new Wall(); // Suponiendo que Wall tiene un constructor vacío
+        } else {
+            this.wall = null;
+        }
+    }
+
+    public boolean hasPlayer() {
+        return player != null;
+    }
+
+    public boolean hasWall() {
+        return wall != null;
+    }
+
+    public void setPlayer(Player player) {
+        this.player = player; // 🔥 Ahora la celda almacena al jugador
+    }
+
+    public Player getPlayer() {
+        return this.player;
+    }
 }

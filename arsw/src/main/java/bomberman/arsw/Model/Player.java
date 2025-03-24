@@ -13,4 +13,11 @@ public class Player {
     private int lifes;
     private String name;
     private List<Bomb> nBombs;
+
+    public void setPosition(int x, int y)
+    {
+        this.xPosition = x;
+        this.yPosition = y;
+    }
+
 }
