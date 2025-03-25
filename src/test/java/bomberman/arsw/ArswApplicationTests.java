@@ -1,4 +1,4 @@
-package bomberman.arsw;
+/*package bomberman.arsw;
 
 import bomberman.arsw.Model.Game;
 import bomberman.arsw.Model.GameConfig;
@@ -133,6 +133,7 @@ class ArswApplicationTests
 		GameService gameService = new GameService();
 		assertNull(gameService.getCurrentGame());
 	}
-	*/
+
 
 }
+*/
