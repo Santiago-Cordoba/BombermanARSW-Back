@@ -3,10 +3,20 @@ package bomberman.arsw.Model;
 public class Cell {
     private boolean hasWall;
     private boolean player;
+    private boolean hasBomb;  // Nuevo atributo
 
     public Cell(int x, int y) {
         this.hasWall = false;
         this.player = false; // ✅ Inicializado en false
+        this.hasBomb = false;
+    }
+
+    public boolean hasBomb() {
+        return hasBomb;
+    }
+
+    public void setBomb(boolean hasBomb) {
+        this.hasBomb = hasBomb;
     }
 
     public boolean hasWall() {
@@ -18,7 +28,7 @@ public class Cell {
     }
 
     public boolean isEmpty() {
-        return !hasWall && !player; // ✅ Corregido (player nunca es null)
+        return !hasWall && !player && !hasBomb; // ✅ Corregido (player nunca es null)
     }
 
     public void setBlock(boolean hasWall) {

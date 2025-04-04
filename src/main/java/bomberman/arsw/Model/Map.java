@@ -59,10 +59,18 @@ public class Map {
 
     // ✅ Corrección: Ahora setCell actualiza correctamente la celda
     public void setCell(int x, int y, char type) {
+        // Primero resetear todos los estados
+        cells[y][x].setPlayer(false);
+        cells[y][x].setBlock(false);
+        cells[y][x].setBomb(false);
+
+        // Establecer el nuevo estado según el tipo
         if (type == 'P') {
             cells[y][x].setPlayer(true);
         } else if (type == '#') {
             cells[y][x].setBlock(true);
+        } else if (type == 'B') {
+            cells[y][x].setBomb(true);
         }
     }
 }

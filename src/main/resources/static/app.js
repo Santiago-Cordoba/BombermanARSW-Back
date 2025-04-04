@@ -27,9 +27,9 @@ function sendConfig() {
 
     const config = {
         duration: duration,
-        jugadores: players,  // ✅ Cambiar playerCount → jugadores
-        bloques: blocks,  // ✅ Cambiar blockCount → bloques
-        vidas: lives  // ✅ Cambiar lives si es diferente en backend
+        playerCount: players,
+        blockCount: blocks,
+        lives: lives
     };
 
     fetch('http://localhost:8080/game/start', {
