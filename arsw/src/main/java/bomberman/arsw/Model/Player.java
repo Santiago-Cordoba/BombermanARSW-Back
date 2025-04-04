@@ -108,4 +108,9 @@ public class Player {
     public int hashCode() {
         return id.hashCode();
     }
+
+    public void setPosition(int x, int y) {
+        this.x = x;
+        this.y = y;
+    }
 }

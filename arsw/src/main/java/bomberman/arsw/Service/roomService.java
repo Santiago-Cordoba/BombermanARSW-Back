@@ -1,11 +1,11 @@
 package bomberman.arsw.Service;
 
-import bomberman.arsw.Model.Player;
-import bomberman.arsw.Model.Room;
+import bomberman.arsw.Model.*;
 import org.springframework.stereotype.Service;
-import bomberman.arsw.Model.RoomManager;
 
+import java.util.HashMap;
 import java.util.List;
+import java.util.Map;
 import java.util.Optional;
 
 @Service
@@ -22,6 +22,17 @@ public class roomService {
 
     public Optional<Room> getRoom(String roomCode) {
         return Optional.ofNullable(roomManager.getRoom(roomCode));
+    }
+
+    private Map<String, GameBoard> gameBoards = new HashMap<String, GameBoard>();
+
+    public void createGameBoard(String roomCode, GameConfig config, List<Player> players) {
+        GameBoard board = new GameBoard(config, players);
+        gameBoards.put(roomCode, board);
+    }
+
+    public GameBoard getGameBoard(String roomCode) {
+        return gameBoards.get(roomCode);
     }
 
     public boolean addPlayerToRoom(String roomCode, Player player) {

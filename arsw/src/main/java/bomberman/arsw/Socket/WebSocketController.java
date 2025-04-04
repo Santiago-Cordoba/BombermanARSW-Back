@@ -1,5 +1,7 @@
 package bomberman.arsw.Socket;
 
+import bomberman.arsw.Model.GameBoard;
+import bomberman.arsw.Model.GameConfig;
 import bomberman.arsw.Model.Player;
 import bomberman.arsw.Service.roomService;
 import org.springframework.messaging.handler.annotation.MessageMapping;
@@ -12,6 +14,7 @@ import org.springframework.beans.factory.annotation.Autowired;
 import java.util.List;
 import java.util.Map;
 import java.util.HashMap;
+import java.util.stream.Collectors;
 
 @Controller
 public class WebSocketController {
@@ -53,18 +56,27 @@ public class WebSocketController {
     @MessageMapping("/room/{roomCode}/start")
     public void startGame(@DestinationVariable String roomCode, @Payload PlayerActionRequest request) {
         if (roomService.canStartGame(roomCode) && roomService.isHost(roomCode, request.getPlayerId())) {
-            // Enviar mensaje especial SOLO al host
-            messagingTemplate.convertAndSendToUser(
-                    request.getPlayerId(), // El ID de sesión del host
-                    "/queue/host",
-                    Map.of("type", "HOST_CONFIG")
-            );
+            // Configuración del juego
+            GameConfig gameConfig = new GameConfig(5 * 60, 3); // 5 minutos en segundos, 3 vidas
 
-            // Enviar mensaje de espera a los demás jugadores
+            // Obtener todos los jugadores de la sala
+            List<Player> players = roomService.getPlayersInRoom(roomCode);
+
+            // Crear y guardar el tablero con la configuración y jugadores
+            roomService.createGameBoard(roomCode, gameConfig, players);
+
+            // Notificar a todos los jugadores que el juego comienza con la info de jugadores
             messagingTemplate.convertAndSend("/topic/room/" + roomCode,
                     Map.of(
-                            "type", "WAITING_FOR_HOST",
-                            "message", "El host está configurando el juego..."
+                            "type", "GAME_START",
+                            "config", gameConfig,
+                            "players", players.stream().map(p -> Map.of(
+                                    "id", p.getId(),
+                                    "name", p.getName(),
+                                    "row", p.getX(),  // Asegúrate que estas propiedades existen
+                                    "col", p.getY(),
+                                    "lives", p.getLives()
+                            )).collect(Collectors.toList())
                     )
             );
         }
@@ -86,6 +98,20 @@ public class WebSocketController {
         response.put("host", hostId);
 
         messagingTemplate.convertAndSend("/topic/room/" + roomCode, response);
+    }
+
+    @MessageMapping("/room/{roomCode}/status")
+    public void getGameStatus(@DestinationVariable String roomCode) {
+        GameBoard board = roomService.getGameBoard(roomCode);
+        if (board != null) {
+            messagingTemplate.convertAndSend("/topic/room/" + roomCode,
+                    Map.of(
+                            "type", "GAME_START",
+                            "config", board.getConfig(),
+                            "players", board.getPlayers()
+                    )
+            );
+        }
     }
 
 
