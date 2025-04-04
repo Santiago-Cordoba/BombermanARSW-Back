@@ -22,8 +22,10 @@ public class WebSocketConfig implements WebSocketMessageBrokerConfigurer {
     @Override
     public void registerStompEndpoints(StompEndpointRegistry registry) {
         registry.addEndpoint("/ws")
-                .setAllowedOriginPatterns("*")
-                .setHandshakeHandler(new DefaultHandshakeHandler(new TomcatRequestUpgradeStrategy()));
-        // Removemos .withSockJS() para usar solo WebSocket nativo
+                .setAllowedOrigins(
+                        "http://localhost:5174",
+                        "http://localhost:5173"
+                )
+                .withSockJS();
     }
 }

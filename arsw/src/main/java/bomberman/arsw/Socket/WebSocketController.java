@@ -10,6 +10,7 @@ import org.springframework.stereotype.Controller;
 import org.springframework.messaging.handler.annotation.Payload;
 import org.springframework.messaging.handler.annotation.DestinationVariable;
 import org.springframework.beans.factory.annotation.Autowired;
+import java.util.UUID;
 
 import java.util.List;
 import java.util.Map;
@@ -55,17 +56,33 @@ public class WebSocketController {
 
     @MessageMapping("/room/{roomCode}/start")
     public void startGame(@DestinationVariable String roomCode, @Payload PlayerActionRequest request) {
-        if (roomService.canStartGame(roomCode) && roomService.isHost(roomCode, request.getPlayerId())) {
-            // Configuración del juego
-            GameConfig gameConfig = new GameConfig(5 * 60, 3); // 5 minutos en segundos, 3 vidas
+        System.out.println("SOLICITUD DE INICIO PARA SALA: " + roomCode);
+        System.out.println("Jugador solicitante: " + request.getPlayerId());
 
-            // Obtener todos los jugadores de la sala
+        // Verificar condiciones
+        boolean canStart = roomService.canStartGame(roomCode);
+        boolean isHost = roomService.isHost(roomCode, request.getPlayerId());
+
+        System.out.println("Puede iniciar: " + canStart);
+        System.out.println("Es host: " + isHost);
+
+        if (canStart && isHost) {
+            System.out.println("CREANDO TABLERO PARA SALA: " + roomCode);
+
+            GameConfig gameConfig = new GameConfig(5 * 60, 3);
             List<Player> players = roomService.getPlayersInRoom(roomCode);
 
-            // Crear y guardar el tablero con la configuración y jugadores
+            System.out.println("Jugadores en sala:");
+            players.forEach(p -> System.out.println("- " + p.getName() + " (ID: " + p.getId() + ")"));
+
+            // Crear y almacenar tablero
             roomService.createGameBoard(roomCode, gameConfig, players);
 
-            // Notificar a todos los jugadores que el juego comienza con la info de jugadores
+            // Verificar que el tablero se creó
+            GameBoard board = roomService.getGameBoard(roomCode);
+            System.out.println("Tablero creado: " + (board != null));
+
+            // Enviar estado inicial a todos los jugadores
             messagingTemplate.convertAndSend("/topic/room/" + roomCode,
                     Map.of(
                             "type", "GAME_START",
@@ -73,12 +90,17 @@ public class WebSocketController {
                             "players", players.stream().map(p -> Map.of(
                                     "id", p.getId(),
                                     "name", p.getName(),
-                                    "row", p.getX(),  // Asegúrate que estas propiedades existen
+                                    "row", p.getX(),
                                     "col", p.getY(),
                                     "lives", p.getLives()
-                            )).collect(Collectors.toList())
+                            )).collect(Collectors.toList()),
+                            "board", board.getBoardState() // Añadir estado del tablero
                     )
             );
+
+            System.out.println("MENSAJE DE INICIO ENVIADO A CLIENTES");
+        } else {
+            System.out.println("NO SE CUMPLEN LAS CONDICIONES PARA INICIAR");
         }
     }
 
@@ -104,6 +126,7 @@ public class WebSocketController {
     public void getGameStatus(@DestinationVariable String roomCode) {
         GameBoard board = roomService.getGameBoard(roomCode);
         if (board != null) {
+            board.update();
             messagingTemplate.convertAndSend("/topic/room/" + roomCode,
                     Map.of(
                             "type", "GAME_START",
@@ -114,5 +137,34 @@ public class WebSocketController {
         }
     }
 
+    @MessageMapping("/room/{roomCode}/move")
+    public void handlePlayerMove(
+            @DestinationVariable String roomCode,
+            @Payload Map<String, Object> payload) {
+
+        GameBoard board = roomService.getGameBoard(roomCode);
+        if (board != null) {
+            String playerId = (String) payload.get("playerId");
+            int newX = (int) payload.get("x");
+            int newY = (int) payload.get("y");
+
+            Player player = board.getPlayerById(playerId);
+            if (player != null) {
+                player.setPosition(newX, newY);
+                board.update();
+
+                // Notificar a todos los jugadores del movimiento
+                messagingTemplate.convertAndSend("/topic/room/" + roomCode + "/movement",
+                        Map.of(
+                                "type", "PLAYER_MOVED",
+                                "playerId", playerId,
+                                "x", newX,
+                                "y", newY,
+                                "board", board.getBoardState()
+                        )
+                );
+            }
+        }
+    }
 
 }

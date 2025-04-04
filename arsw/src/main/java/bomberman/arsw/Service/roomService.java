@@ -3,10 +3,8 @@ package bomberman.arsw.Service;
 import bomberman.arsw.Model.*;
 import org.springframework.stereotype.Service;
 
-import java.util.HashMap;
-import java.util.List;
+import java.util.*;
 import java.util.Map;
-import java.util.Optional;
 
 @Service
 public class roomService {
@@ -27,9 +25,18 @@ public class roomService {
     private Map<String, GameBoard> gameBoards = new HashMap<String, GameBoard>();
 
     public void createGameBoard(String roomCode, GameConfig config, List<Player> players) {
-        GameBoard board = new GameBoard(config, players);
-        gameBoards.put(roomCode, board);
+        System.out.println("INICIANDO CREACIÓN DE TABLERO PARA: " + roomCode);
+
+        try {
+            GameBoard board = new GameBoard(config, players);
+            gameBoards.put(roomCode, board);
+            System.out.println("TABLERO CREADO EXITOSAMENTE");
+        } catch (Exception e) {
+            System.out.println("ERROR AL CREAR TABLERO: " + e.getMessage());
+            e.printStackTrace();
+        }
     }
+
 
     public GameBoard getGameBoard(String roomCode) {
         return gameBoards.get(roomCode);
