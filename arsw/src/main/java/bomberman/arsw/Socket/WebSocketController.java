@@ -144,24 +144,35 @@ public class WebSocketController {
         GameBoard board = roomService.getGameBoard(roomCode);
         if (board != null) {
             Player player = board.getPlayerById(request.getPlayerId());
-            if (player != null && board.isValidMove(request.getNewX(), request.getNewY())) {
-                player.setPosition(request.getNewX(), request.getNewY());
-
-                // Enviar solo los datos necesarios
-                Map<String, Object> response = new HashMap<>();
-                response.put("type", "GAME_UPDATE");
-                response.put("players", board.getPlayers().stream()
-                        .map(p -> Map.of(
-                                "id", p.getId(),
-                                "name", p.getName(),
-                                "x", p.getX(),
-                                "y", p.getY()
-                        ))
-                        .collect(Collectors.toList()));
-
-                messagingTemplate.convertAndSend("/topic/game/" + roomCode, response);
+            if (player != null && board.movePlayer(player, request.getNewX(), request.getNewY())) {
+                broadcastGameState2(roomCode, board);
             }
         }
+    }
+
+    private void broadcastGameState2(String roomCode, GameBoard board) {
+        Map<String, Object> response = new HashMap<>();
+        response.put("type", "GAME_UPDATE");
+        response.put("players", board.getPlayers().stream()
+                .map(p -> Map.of(
+                        "id", p.getId(),
+                        "name", p.getName(),
+                        "x", p.getX(),
+                        "y", p.getY(),
+                        "lives", p.getLives(), // Añadir vidas
+                        "bombCapacity", p.getBombCapacity()
+                ))
+                .collect(Collectors.toList()));
+        response.put("map", board.getGameMap().getCellStates());
+        response.put("powerUps", board.getPowerUps().stream()
+                .map(pu -> Map.of(
+                        "type", pu.getType().name(),
+                        "x", pu.getX(),
+                        "y", pu.getY()
+                ))
+                .collect(Collectors.toList()));
+
+        messagingTemplate.convertAndSend("/topic/game/" + roomCode, response);
     }
 
     @MessageMapping("/game/{roomCode}/placeBomb")
@@ -171,9 +182,41 @@ public class WebSocketController {
             Player player = board.getPlayerById(request.getPlayerId());
             if (player != null) {
                 board.placeBomb(player.getX(), player.getY(), player);
-                broadcastGameState(roomCode, board);
+                sendGameUpdate(roomCode, board);
             }
         }
+    }
+
+    private void sendGameUpdate(String roomCode, GameBoard board) {
+        messagingTemplate.convertAndSend("/topic/game/" + roomCode, Map.of(
+                "type", "GAME_UPDATE",
+                "players", board.getPlayers().stream()
+                        .map(p -> Map.of(
+                                "id", p.getId(),
+                                "name", p.getName(),
+                                "x", p.getX(),
+                                "y", p.getY(),
+                                "lives", p.getLives(),
+                                "bombCapacity", p.getBombCapacity(),
+                                "bombRange", p.getBombRange()
+                        ))
+                        .collect(Collectors.toList()),
+                "bombs", board.getBombs().stream()
+                        .map(b -> Map.of(
+                                "x", b.getX(),
+                                "y", b.getY(),
+                                "timer", b.getTimer()
+                        ))
+                        .collect(Collectors.toList()),
+                "map", board.getGameMap().getCellStates(),
+                "powerUps", board.getPowerUps().stream()
+                        .map(pu -> Map.of(
+                                "type", pu.getType().name(),
+                                "x", pu.getX(),
+                                "y", pu.getY()
+                        ))
+                        .collect(Collectors.toList())
+        ));
     }
 
     private void broadcastGameState(String roomCode, GameBoard board) {
@@ -214,6 +257,23 @@ public class WebSocketController {
             ));
 
             messagingTemplate.convertAndSend("/topic/game/" + roomCode, response);
+        }
+    }
+
+    @MessageMapping("/game/{roomCode}/collectPowerUp")
+    public void handleCollectPowerUp(
+            @DestinationVariable String roomCode,
+            @Payload Map<String, Object> payload) {
+
+        GameBoard board = roomService.getGameBoard(roomCode);
+        if (board != null) {
+            String playerId = (String) payload.get("playerId");
+            int x = (int) payload.get("x");
+            int y = (int) payload.get("y");
+
+            if (board.collectPowerUp(playerId, x, y)) {
+                broadcastGameState2(roomCode, board);
+            }
         }
     }
 

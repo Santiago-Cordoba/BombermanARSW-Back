@@ -14,6 +14,7 @@ public class Cell {
     private boolean destructible;
 
 
+
     public Cell(int x, int y) {
         this.x = x;
         this.y = y;
@@ -81,13 +82,11 @@ public class Cell {
         }
     }
 
-
-    public void collectPowerUp(Player player) {
-        if (powerUp != null && player != null) {
-            powerUp.applyEffect(player);
-            powerUp = null; // El power-up desaparece después de ser recolectado
-        }
+    public boolean hasCollectiblePowerUp() {
+        return powerUp != null && !isWall && !hasBomb();
     }
+
+
 
     public String toJsonString() {
         return String.format(
@@ -129,6 +128,20 @@ public class Cell {
 
     public void setDestructible(boolean destructible) {
         this.destructible = destructible;
+    }
+
+    public void removePowerUp() {
+        PowerUp removedPowerUp = this.powerUp;
+        this.powerUp = null;
+    }
+
+    public boolean collectPowerUp(Player player) {
+        if (powerUp != null && player != null) {
+            powerUp.applyEffect(player);
+            powerUp = null;
+            return true;
+        }
+        return false;
     }
 
 

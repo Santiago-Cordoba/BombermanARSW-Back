@@ -19,6 +19,7 @@ public class Player {
     private boolean host;
     private int speed;
     private int bombCapacity = 1;
+    private int bombRange = 1;
 
     // Constructor, getters y setters
 
@@ -35,6 +36,14 @@ public class Player {
         this.ready = false;
         this.host = false;
         speed = 1;
+    }
+
+    public int getBombRange() {
+        return bombRange;
+    }
+
+    public void increaseBombRange() {
+        bombRange++;
     }
 
     public Map<String, Object> toMap() {
@@ -140,6 +149,8 @@ public class Player {
                 x,
                 y,
                 lives,
+                bombCapacity,
+                bombRange,
                 host,
                 ready
         );

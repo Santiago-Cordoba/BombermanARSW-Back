@@ -33,9 +33,9 @@ public class GameMap {
         return false;
     }
 
-    public boolean placeBomb(int x, int y, Player owner) {
+    public boolean placeBomb(int x, int y, Bomb bomb) {
         if (isValidPosition(x, y) && !cells[y][x].isWall() && !cells[y][x].hasBomb()) {
-            cells[y][x].setBomb(new Bomb( x, y, owner));
+            cells[y][x].setBomb(bomb);
             return true;
         }
         return false;
@@ -83,7 +83,7 @@ public class GameMap {
         }
     }
 
-    private boolean isValidPosition(int x, int y) {
+    public boolean isValidPosition(int x, int y) {
         return x >= 0 && x < width && y >= 0 && y < height;
     }
 
@@ -217,5 +217,18 @@ public class GameMap {
         }
 
         return cellStates;
+    }
+
+    public List<Cell> getEmptyCells() {
+        List<Cell> emptyCells = new ArrayList<>();
+        for (int y = 0; y < height; y++) {
+            for (int x = 0; x < width; x++) {
+                Cell cell = cells[y][x];
+                if (!cell.isWall() && !cell.hasBomb() && !cell.hasPlayer()) {
+                    emptyCells.add(cell);
+                }
+            }
+        }
+        return emptyCells;
     }
 }

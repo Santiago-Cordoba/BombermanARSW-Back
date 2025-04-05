@@ -18,7 +18,7 @@ public class Bomb {
         this.x = x;
         this.y = y;
         this.timer = 2; // Segundos antes de explotar
-        this.range = 1; // Rango inicial de la explosión
+        this.range = owner != null ? owner.getBombRange() : 1; // Rango inicial de la explosión
     }
 
     public String toJsonString() {
@@ -36,7 +36,9 @@ public class Bomb {
     public Player getOwner() { return owner; }
     public int getTimer() { return timer; }
 
-
+    public int getRange() {
+        return range;
+    }
 }
 
 
