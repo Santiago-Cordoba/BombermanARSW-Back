@@ -104,38 +104,32 @@ public class GameMap {
     }
 
     public static GameMap createDefaultMap(int playersCount) {
-        // Tamaño estándar para 2-4 jugadores
         int width = 15;
         int height = 13;
         GameMap gameMap = new GameMap(width, height);
 
-        // Paredes indestructibles en patrón de rejilla
-        for (int y = 0; y < height; y += 2) {
-            for (int x = 0; x < width; x += 2) {
-                gameMap.placeWall(x, y);
-            }
-        }
-
-        gameMap.placePowerUp(3, 3, new LifeUpPowerUp());
-        gameMap.placePowerUp(11, 3, new LifeUpPowerUp());
-        gameMap.placePowerUp(3, 9, new LifeUpPowerUp());
-        gameMap.placePowerUp(11, 9, new LifeUpPowerUp());
-
-        // Paredes destructibles en las áreas libres, excepto cerca de las esquinas
+        // 1. Paredes en los bordes y en patrón de rejilla
         for (int y = 0; y < height; y++) {
             for (int x = 0; x < width; x++) {
-                // Solo colocar paredes destructibles en celdas libres
-                if (!gameMap.getCell(x, y).isWall() &&
-                        !isNearCorner(x, y, width, height)) {
-                    // 70% de probabilidad de pared destructible
-                    if (Math.random() < 0.7) {
-                        gameMap.placeWall(x, y);
-                    }
+                Cell cell = gameMap.getCell(x, y);
+
+                // Establecer paredes en bordes o en posiciones pares
+                boolean isWall = x == 0 || y == 0 || x == width - 1 || y == height - 1 ||
+                        (x % 2 == 0 && y % 2 == 0);
+
+                cell.setWall(isWall);
+
+                // Todas las paredes son indestructibles
+                if (isWall) {
+                    cell.setDestructible(false);
                 }
+
+                // Inicializar sin power-ups
+                cell.setPowerUp(null);
             }
         }
 
-        // Asegurar que las esquinas y áreas circundantes estén libres
+        // 2. Limpiar áreas de spawn de jugadores
         clearPlayerSpawnAreas(gameMap, width, height, playersCount);
 
         return gameMap;
@@ -209,7 +203,7 @@ public class GameMap {
                 cellState.put("x", x);
                 cellState.put("y", y);
                 cellState.put("isWall", cell.isWall());
-                cellState.put("isDestructible", cell.isWall()); // Todas las paredes son destructibles
+                cellState.put("isDestructible", cell.isDestructible()); // Todas las paredes son destructibles
                 cellState.put("hasBomb", cell.hasBomb());
                 cellState.put("hasPowerUp", cell.hasPowerUp());
 

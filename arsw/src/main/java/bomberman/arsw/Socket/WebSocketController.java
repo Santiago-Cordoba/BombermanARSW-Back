@@ -137,13 +137,29 @@ public class WebSocketController {
     }
 
     @MessageMapping("/game/{roomCode}/move")
-    public void handlePlayerMove(@DestinationVariable String roomCode, @Payload PlayerMoveRequest request) {
+    public void handlePlayerMove(
+            @DestinationVariable String roomCode,
+            @Payload PlayerMoveRequest request) {
+
         GameBoard board = roomService.getGameBoard(roomCode);
         if (board != null) {
             Player player = board.getPlayerById(request.getPlayerId());
             if (player != null && board.isValidMove(request.getNewX(), request.getNewY())) {
                 player.setPosition(request.getNewX(), request.getNewY());
-                broadcastGameState(roomCode, board);
+
+                // Enviar solo los datos necesarios
+                Map<String, Object> response = new HashMap<>();
+                response.put("type", "GAME_UPDATE");
+                response.put("players", board.getPlayers().stream()
+                        .map(p -> Map.of(
+                                "id", p.getId(),
+                                "name", p.getName(),
+                                "x", p.getX(),
+                                "y", p.getY()
+                        ))
+                        .collect(Collectors.toList()));
+
+                messagingTemplate.convertAndSend("/topic/game/" + roomCode, response);
             }
         }
     }

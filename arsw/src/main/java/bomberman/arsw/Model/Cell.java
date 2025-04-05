@@ -11,6 +11,7 @@ public class Cell {
     private Bomb bomb;
     private PowerUp powerUp;
     private List<Player> players;
+    private boolean destructible;
 
 
     public Cell(int x, int y) {
@@ -96,7 +97,8 @@ public class Cell {
                 isWall,
                 bomb != null,
                 powerUp != null,
-                players.stream().map(Player::getId).collect(Collectors.joining("\",\"", "[\"", "\"]"))
+                players.stream().map(Player::getId).collect(Collectors.joining("\",\"", "[\"", "\"]")),
+                isDestructible()
         );
     }
 
@@ -119,6 +121,14 @@ public class Cell {
 
     public List<Player> getPlayers() {
         return new ArrayList<>(players);
+    }
+
+    public boolean isDestructible() {
+        return destructible;
+    }
+
+    public void setDestructible(boolean destructible) {
+        this.destructible = destructible;
     }
 
 

@@ -4,6 +4,7 @@ public class PlayerMoveRequest {
     private String playerId;
     private int newX;
     private int newY;
+    private String direction; // Añadir este campo
 
     // Getters y setters
     public String getPlayerId() {
@@ -28,5 +29,13 @@ public class PlayerMoveRequest {
 
     public void setNewY(int newY) {
         this.newY = newY;
+    }
+
+    public String getDirection() {
+        return direction;
+    }
+
+    public void setDirection(String direction) {
+        this.direction = direction;
     }
 }

@@ -47,10 +47,10 @@ public class roomService {
 
         // Posiciones iniciales según número de jugadores
         int[][] startPositions = {
-                {0, 0},
-                {width-1, height-1},// Jugador 1: esquina superior izquierda
-                {width-1, 0},           // Jugador 2: esquina superior derecha
-                {0, height-1},          // Jugador 3: esquina inferior izquierda
+                {1, 1},
+                {width-2, height-2},// Jugador 1: esquina superior izquierda
+                {width-2, 1},           // Jugador 2: esquina superior derecha
+                {1, height-2},          // Jugador 3: esquina inferior izquierda
                      // Jugador 4: esquina inferior derecha
         };
 
