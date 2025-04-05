@@ -3,6 +3,8 @@ package bomberman.arsw.Model;
 import lombok.Getter;
 import lombok.Setter;
 
+import java.util.HashMap;
+import java.util.Map;
 import java.util.UUID;
 
 public class Player {
@@ -15,6 +17,8 @@ public class Player {
     private int bombs;
     private boolean ready;
     private boolean host;
+    private int speed;
+    private int bombCapacity = 1;
 
     // Constructor, getters y setters
 
@@ -30,6 +34,16 @@ public class Player {
         this.bombs = bombs;
         this.ready = false;
         this.host = false;
+        speed = 1;
+    }
+
+    public Map<String, Object> toMap() {
+        Map<String, Object> map = new HashMap<>();
+        map.put("id", this.id);
+        map.put("name", this.name);
+        map.put("x", this.x);
+        map.put("y", this.y);
+        return map;
     }
 
     public void setHost(boolean host) {
@@ -113,4 +127,40 @@ public class Player {
         this.x = x;
         this.y = y;
     }
+
+    public void increaseLives(int amount) {
+        this.lives += amount;
+    }
+
+    public String toJsonString() {
+        return String.format(
+                "{\"id\":\"%s\",\"name\":\"%s\",\"x\":%d,\"y\":%d,\"lives\":%d,\"bombCapacity\":%d,\"isHost\":%b,\"isReady\":%b}",
+                id,
+                name,
+                x,
+                y,
+                lives,
+                host,
+                ready
+        );
+    }
+
+    public boolean canPlaceBomb() {
+        return bombCapacity > 0;
+    }
+
+    public void decreaseBombCapacity() {
+        if (bombCapacity > 0) {
+            bombCapacity--;
+        }
+    }
+
+    public void increaseBombCapacity() {
+        bombCapacity++;
+    }
+
+    public int getBombCapacity() {
+        return bombCapacity;
+    }
+
 }

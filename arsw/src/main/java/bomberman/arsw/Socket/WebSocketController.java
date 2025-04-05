@@ -2,6 +2,7 @@ package bomberman.arsw.Socket;
 
 import bomberman.arsw.Model.GameBoard;
 import bomberman.arsw.Model.GameConfig;
+import bomberman.arsw.Model.GameMap;
 import bomberman.arsw.Model.Player;
 import bomberman.arsw.Service.roomService;
 import org.springframework.messaging.handler.annotation.MessageMapping;
@@ -54,31 +55,52 @@ public class WebSocketController {
     }
 
     @MessageMapping("/room/{roomCode}/start")
-    public void startGame(@DestinationVariable String roomCode, @Payload PlayerActionRequest request) {
-        if (roomService.canStartGame(roomCode) && roomService.isHost(roomCode, request.getPlayerId())) {
-            // Configuración del juego
-            GameConfig gameConfig = new GameConfig(5 * 60, 3); // 5 minutos en segundos, 3 vidas
+    public void startGame(@DestinationVariable String roomCode, @Payload Map<String, Object> payload) {
+        String playerId = (String) payload.get("playerId");
 
-            // Obtener todos los jugadores de la sala
+        if (roomService.isHost(roomCode, playerId) && roomService.canStartGame(roomCode)) {
+            // 1. Crear configuración
+            GameConfig config = new GameConfig(300, 3); // 5 min, 3 vidas
+
+            // 2. Obtener jugadores
             List<Player> players = roomService.getPlayersInRoom(roomCode);
 
-            // Crear y guardar el tablero con la configuración y jugadores
-            roomService.createGameBoard(roomCode, gameConfig, players);
+            // 3. Crear tablero (esto ahora crea el mapa internamente)
+            roomService.createGameBoard(roomCode, config, players);
 
-            // Notificar a todos los jugadores que el juego comienza con la info de jugadores
-            messagingTemplate.convertAndSend("/topic/room/" + roomCode,
-                    Map.of(
-                            "type", "GAME_START",
-                            "config", gameConfig,
-                            "players", players.stream().map(p -> Map.of(
-                                    "id", p.getId(),
-                                    "name", p.getName(),
-                                    "row", p.getX(),  // Asegúrate que estas propiedades existen
-                                    "col", p.getY(),
-                                    "lives", p.getLives()
-                            )).collect(Collectors.toList())
-                    )
-            );
+            // 4. Obtener tablero creado
+            GameBoard board = roomService.getGameBoard(roomCode);
+            if (board == null) {
+                throw new IllegalStateException("Game board not initialized for room: " + roomCode);
+            }
+
+            // 5. Formatear jugadores como Map (suponiendo que tienes un método toMap())
+            List<Map<String, Object>> playersData = players.stream()
+                    .map(Player::toMap)
+                    .toList();
+
+            // 6. Formatear mapa
+            GameMap gameMap = board.getGameMap();
+            Map<String, Object> mapData = new HashMap<>();
+            mapData.put("width", gameMap.getWidth());
+            mapData.put("height", gameMap.getHeight());
+            mapData.put("cells", gameMap.getCellStates());
+
+            // 7. Formatear configuración como Map (opcional si el frontend no acepta el objeto Java tal cual)
+            Map<String, Object> configData = new HashMap<>();
+            configData.put("duration", config.getDuration());
+            configData.put("lives", config.getLives());
+
+            // 8. Armar mensaje completo
+            Map<String, Object> response = new HashMap<>();
+            response.put("type", "GAME_START");
+            response.put("config", configData);
+            response.put("players", playersData);
+            response.put("map", mapData);
+
+            // 9. Enviar mensaje a los clientes
+            messagingTemplate.convertAndSend("/topic/room/" + roomCode, response);
+            messagingTemplate.convertAndSend("/topic/game/" + roomCode, response);
         }
     }
 
@@ -113,6 +135,72 @@ public class WebSocketController {
             );
         }
     }
+
+    @MessageMapping("/game/{roomCode}/move")
+    public void handlePlayerMove(@DestinationVariable String roomCode, @Payload PlayerMoveRequest request) {
+        GameBoard board = roomService.getGameBoard(roomCode);
+        if (board != null) {
+            Player player = board.getPlayerById(request.getPlayerId());
+            if (player != null && board.isValidMove(request.getNewX(), request.getNewY())) {
+                player.setPosition(request.getNewX(), request.getNewY());
+                broadcastGameState(roomCode, board);
+            }
+        }
+    }
+
+    @MessageMapping("/game/{roomCode}/placeBomb")
+    public void handlePlaceBomb(@DestinationVariable String roomCode, @Payload PlayerActionRequest request) {
+        GameBoard board = roomService.getGameBoard(roomCode);
+        if (board != null) {
+            Player player = board.getPlayerById(request.getPlayerId());
+            if (player != null) {
+                board.placeBomb(player.getX(), player.getY(), player);
+                broadcastGameState(roomCode, board);
+            }
+        }
+    }
+
+    private void broadcastGameState(String roomCode, GameBoard board) {
+        messagingTemplate.convertAndSend("/topic/game/" + roomCode, Map.of(
+                "type", "GAME_UPDATE",
+                "state", board.getGameStateJson()
+        ));
+    }
+
+
+    @MessageMapping("/game/{roomCode}/init")
+    public void initGame(
+            @DestinationVariable String roomCode,
+            @Payload Map<String, Object> request) {
+
+        GameBoard board = roomService.getGameBoard(roomCode);
+        if (board != null) {
+            // Enviar estado completo del juego
+            Map<String, Object> response = new HashMap<>();
+            response.put("type", "GAME_UPDATE");
+            response.put("state", Map.of(
+                    "players", board.getPlayers().stream().map(p -> Map.of(
+                            "id", p.getId(),
+                            "name", p.getName(),
+                            "x", p.getX(),
+                            "y", p.getY(),
+                            "lives", p.getLives()
+                    )).collect(Collectors.toList()),
+                    "map", Map.of(
+                            "width", board.getGameMap().getWidth(),
+                            "height", board.getGameMap().getHeight(),
+                            "cells", board.getGameMap().getCellStates()
+                    ),
+                    "config", Map.of(
+                            "duration", board.getConfig().getDuration(),
+                            "lives", board.getConfig().getLives()
+                    )
+            ));
+
+            messagingTemplate.convertAndSend("/topic/game/" + roomCode, response);
+        }
+    }
+
 
 
 }

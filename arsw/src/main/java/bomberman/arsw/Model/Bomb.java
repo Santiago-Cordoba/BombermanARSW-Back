@@ -5,10 +5,42 @@ import lombok.Data;
 
 @Data
 @AllArgsConstructor
+// Clase Bomb
 public class Bomb {
-    private int xPosition;
-    private int yPosition;
-    private int radius;
-    private int timeExplosion;
-    private Player owner;
+    private final Player owner;
+    private final int x;
+    private final int y;
+    private int timer;
+    private int range;
+
+    public Bomb( int x, int y, Player owner) {
+        this.owner = owner;
+        this.x = x;
+        this.y = y;
+        this.timer = 2; // Segundos antes de explotar
+        this.range = 1; // Rango inicial de la explosión
+    }
+
+    public String toJsonString() {
+        return String.format(
+                "{\"x\":%d,\"y\":%d,\"timer\":%d,\"ownerId\":\"%s\"}",
+                x,
+                y,
+                timer,
+                owner != null ? owner.getId() : "null"
+        );
+    }
+
+    public int getX() { return x; }
+    public int getY() { return y; }
+    public Player getOwner() { return owner; }
+    public int getTimer() { return timer; }
+
+
 }
+
+
+
+
+
+

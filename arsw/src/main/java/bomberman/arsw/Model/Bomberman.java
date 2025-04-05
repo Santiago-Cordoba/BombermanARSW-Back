@@ -4,6 +4,6 @@ import java.util.List;
 
 public class Bomberman {
     private List<Player> players;
-    private Map map;
+    private GameMap gameMap;
     private boolean gameOver;
 }

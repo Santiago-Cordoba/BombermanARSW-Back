@@ -27,11 +27,60 @@ public class roomService {
     private Map<String, GameBoard> gameBoards = new HashMap<String, GameBoard>();
 
     public void createGameBoard(String roomCode, GameConfig config, List<Player> players) {
-        GameBoard board = new GameBoard(config, players);
+        // Crear el mapa primero
+        GameMap gameMap = GameMap.createDefaultMap(players.size());
+
+        // Luego crear el tablero con el mapa
+        GameBoard board = new GameBoard(config, players, gameMap);
+
+        // Guardar el tablero en el mapa
         gameBoards.put(roomCode, board);
+
+        // Posicionar jugadores en el mapa
+        positionPlayers(board, players);
     }
 
-    public GameBoard getGameBoard(String roomCode) {
+    private void positionPlayers(GameBoard board, List<Player> players) {
+        GameMap map = board.getGameMap();
+        int width = map.getWidth();
+        int height = map.getHeight();
+
+        // Posiciones iniciales según número de jugadores
+        int[][] startPositions = {
+                {0, 0},
+                {width-1, height-1},// Jugador 1: esquina superior izquierda
+                {width-1, 0},           // Jugador 2: esquina superior derecha
+                {0, height-1},          // Jugador 3: esquina inferior izquierda
+                     // Jugador 4: esquina inferior derecha
+        };
+
+        for (int i = 0; i < players.size(); i++) {
+            Player p = players.get(i);
+            int[] pos = startPositions[i];
+            p.setPosition(pos[0], pos[1]);
+            map.placePlayer(pos[0], pos[1], p);
+        }
+    }
+
+    private void placeInitialPlayers(GameBoard board, List<Player> players) {
+        GameMap map = board.getGameMap();
+
+        // Posiciones iniciales según número de jugadores
+        int[][] startPositions = {
+                {1, 1},         // Jugador 1: esquina superior izquierda
+                {map.getWidth()-2, 1},  // Jugador 2: esquina superior derecha
+                {1, map.getHeight()-2}, // Jugador 3: esquina inferior izquierda
+                {map.getWidth()-2, map.getHeight()-2} // Jugador 4: esquina inferior derecha
+        };
+
+        for (int i = 0; i < players.size(); i++) {
+            Player p = players.get(i);
+            int[] pos = startPositions[i];
+            p.setPosition(pos[0], pos[1]);
+            map.placePlayer(pos[0], pos[1], p);
+        }
+    }
+        public GameBoard getGameBoard(String roomCode) {
         return gameBoards.get(roomCode);
     }
 

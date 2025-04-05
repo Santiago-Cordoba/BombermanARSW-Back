@@ -1,7 +1,15 @@
 package bomberman.arsw.Model;
 
-public class PowerUp {
-    private int xPosition;
-    private int yPosition;
 
+public interface PowerUp {
+    void applyEffect(Player player);
+    PowerUpType getType();
+
+    // Añadir métodos para posición
+    int getX();
+    int getY();
+    void setPosition(int x, int y);
+
+    // Método para la representación JSON
+    String toJsonString();
 }
