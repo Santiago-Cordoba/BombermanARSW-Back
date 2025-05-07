@@ -1,9 +1,6 @@
 package bomberman.arsw.Socket;
 
-import bomberman.arsw.Model.GameBoard;
-import bomberman.arsw.Model.GameConfig;
-import bomberman.arsw.Model.GameMap;
-import bomberman.arsw.Model.Player;
+import bomberman.arsw.Model.*;
 import bomberman.arsw.Service.roomService;
 import org.springframework.messaging.handler.annotation.MessageMapping;
 import org.springframework.messaging.simp.SimpMessagingTemplate;
@@ -145,7 +142,13 @@ public class WebSocketController {
         if (board != null) {
             Player player = board.getPlayerById(request.getPlayerId());
             if (player != null && board.movePlayer(player, request.getNewX(), request.getNewY())) {
-                broadcastGameState2(roomCode, board);
+                // ¡Log para depuración!
+                System.out.println(
+                        "[BROADCAST] Jugador " + player.getName() +
+                                " movido a (" + request.getNewX() + ", " + request.getNewY() + ")" +
+                                " en sala: " + roomCode
+                );
+                broadcastGameState2(roomCode, board); // Envía el estado actualizado
             }
         }
     }
@@ -176,17 +179,20 @@ public class WebSocketController {
     }
 
     @MessageMapping("/game/{roomCode}/placeBomb")
-    public void handlePlaceBomb(@DestinationVariable String roomCode, @Payload PlayerActionRequest request) {
+    public void handlePlaceBomb(
+            @DestinationVariable String roomCode,
+            @Payload PlayerActionRequest request) {
+
         GameBoard board = roomService.getGameBoard(roomCode);
         if (board != null) {
             Player player = board.getPlayerById(request.getPlayerId());
             if (player != null) {
+                // Colocar la bomba
                 board.placeBomb(player.getX(), player.getY(), player);
                 sendGameUpdate(roomCode, board);
             }
         }
     }
-
     private void sendGameUpdate(String roomCode, GameBoard board) {
         messagingTemplate.convertAndSend("/topic/game/" + roomCode, Map.of(
                 "type", "GAME_UPDATE",
@@ -203,9 +209,12 @@ public class WebSocketController {
                         .collect(Collectors.toList()),
                 "bombs", board.getBombs().stream()
                         .map(b -> Map.of(
+                                "id", b.getId(), // ¡Nuevo campo!
                                 "x", b.getX(),
                                 "y", b.getY(),
-                                "timer", b.getTimer()
+                                "timer", b.getTimer(),
+                                "range", b.getRange(), // ¡Nuevo campo!
+                                "playerId", b.getPlayerId() // ¡Nuevo campo!
                         ))
                         .collect(Collectors.toList()),
                 "map", board.getGameMap().getCellStates(),

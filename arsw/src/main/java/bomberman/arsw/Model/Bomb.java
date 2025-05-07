@@ -19,6 +19,10 @@ public class Bomb {
         this.y = y;
         this.timer = 2; // Segundos antes de explotar
         this.range = owner != null ? owner.getBombRange() : 1; // Rango inicial de la explosión
+
+        if (x < 0 || y < 0) {
+            throw new IllegalArgumentException("Posición de bomba inválida");
+        }
     }
 
     public String toJsonString() {
@@ -38,6 +42,14 @@ public class Bomb {
 
     public int getRange() {
         return range;
+    }
+
+    public String getId() {
+        return "bomb-" + x + "-" + y + "-" + timer; // Ejemplo de ID único
+    }
+
+    public String getPlayerId() {
+        return owner != null ? owner.getId() : "unknown";
     }
 }
 

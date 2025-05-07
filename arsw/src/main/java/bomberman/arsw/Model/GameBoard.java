@@ -1,6 +1,9 @@
 package bomberman.arsw.Model;
 
 import java.util.*;
+import java.util.concurrent.Executors;
+import java.util.concurrent.ScheduledExecutorService;
+import java.util.concurrent.TimeUnit;
 import java.util.stream.Collectors;
 
 public class GameBoard {
@@ -188,48 +191,51 @@ public class GameBoard {
     }
 
     public void placeBomb(int x, int y, Player owner) {
-        if (owner.canPlaceBomb() && gameMap.isValidPosition(x, y)) {
-            Bomb bomb = new Bomb(x, y, owner);
-            bombs.add(bomb);
-            gameMap.placeBomb(x, y, bomb);
-            owner.decreaseBombCapacity();
-
-            // Programar explosión después de 2 segundos
-            new Timer().schedule(new TimerTask() {
-                @Override
-                public void run() {
-                    explodeBomb(bomb);
-                }
-            }, 2000); // 2000 ms = 2 segundos
+        if (owner == null || !owner.canPlaceBomb() || !gameMap.isValidPosition(x, y)) {
+            return;
         }
+
+        Bomb bomb = new Bomb(x, y, owner);
+        bombs.add(bomb);
+        gameMap.placeBomb(x, y, bomb);
+        owner.decreaseBombCapacity();
+
+        ScheduledExecutorService scheduler = Executors.newScheduledThreadPool(1);
+        scheduler.schedule(() -> {
+            try {
+                explodeBomb(bomb);
+            } catch (Exception e) {
+                System.err.println("Error al explotar bomba: " + e.getMessage());
+            } finally {
+                scheduler.shutdown();
+            }
+        }, 2, TimeUnit.SECONDS);
     }
 
     private void explodeBomb(Bomb bomb) {
-        // Remover la bomba de la lista
+        // Verificar si la bomba aún existe (puede haber sido removida por otra explosión)
+        if (!bombs.contains(bomb)) {
+            return;
+        }
+
+        // Remover la bomba
         bombs.remove(bomb);
+        gameMap.removeBomb(bomb.getX(), bomb.getY());
         bomb.getOwner().increaseBombCapacity();
 
-        // Obtener posición de la bomba
-        int x = bomb.getX();
-        int y = bomb.getY();
-        int range = bomb.getRange();
-
-        // Remover la bomba del mapa
-        gameMap.removeBomb(x, y);
-
-        // Crear lista de celdas afectadas (en forma de cruz)
+        // Calcular celdas afectadas
         List<Cell> affectedCells = new ArrayList<>();
 
-        // Explosión en las 4 direcciones
-        explodeDirection(x, y, 0, -1, range, affectedCells);  // Arriba
-        explodeDirection(x, y, 0, 1, range, affectedCells);   // Abajo
-        explodeDirection(x, y, -1, 0, range, affectedCells);  // Izquierda
-        explodeDirection(x, y, 1, 0, range, affectedCells);   // Derecha
+        // Añadir celda central
+        affectedCells.add(gameMap.getCell(bomb.getX(), bomb.getY()));
 
-        // Añadir la celda central
-        affectedCells.add(gameMap.getCell(x, y));
+        // Explosión en 4 direcciones
+        explodeDirection(bomb.getX(), bomb.getY(), 0, 1, bomb.getRange(), affectedCells);  // Derecha
+        explodeDirection(bomb.getX(), bomb.getY(), 0, -1, bomb.getRange(), affectedCells); // Izquierda
+        explodeDirection(bomb.getX(), bomb.getY(), 1, 0, bomb.getRange(), affectedCells);  // Abajo
+        explodeDirection(bomb.getX(), bomb.getY(), -1, 0, bomb.getRange(), affectedCells); // Arriba
 
-        // Procesar todas las celdas afectadas
+        // Procesar efectos
         processAffectedCells(affectedCells, bomb.getOwner());
     }
 
@@ -259,6 +265,7 @@ public class GameBoard {
     }
 
     private void processAffectedCells(List<Cell> affectedCells, Player owner) {
+        boolean playersAffected = false;
         for (Cell cell : affectedCells) {
             // Destruir paredes destructibles
             if (cell.isWall() && cell.isDestructible()) {
@@ -268,15 +275,14 @@ public class GameBoard {
 
             // Dañar jugadores en la celda
             for (Player player : new ArrayList<>(cell.getPlayers())) {
-                if (!player.equals(owner)) { // No dañar al dueño de la bomba
-                    player.increaseLives(-1); // Reducir una vida
-                    if (player.getLives() <= 0) {
-                        // Jugador muerto, removerlo del juego
-                        players.remove(player);
-                        gameMap.removePlayer(player.getX(), player.getY(), player);
+                player.increaseLives(-1); // Reducir una vida
+                if (player.getLives() <= 0) {
+                    // Jugador muerto, removerlo del juego
+                    players.remove(player);
+                    gameMap.removePlayer(player.getX(), player.getY(), player);
                     }
                 }
-            }
+
 
             // Eliminar bombas en la celda (explosión en cadena)
             if (cell.hasBomb()) {
@@ -293,11 +299,4 @@ public class GameBoard {
             }
         }
     }
-
-
-
-
-
-
-
 }
