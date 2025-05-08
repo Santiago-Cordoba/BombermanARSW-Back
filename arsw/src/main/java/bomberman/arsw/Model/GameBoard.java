@@ -163,10 +163,12 @@ public class GameBoard {
             return false;
         }
 
+
+
         return true;
     }
 
-    public boolean movePlayer(Player player, int newX, int newY) {
+    public synchronized boolean movePlayer(Player player, int newX, int newY) {
         if (!isValidMove(newX, newY)) {
             return false;
         }
