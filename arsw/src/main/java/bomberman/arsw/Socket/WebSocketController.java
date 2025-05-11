@@ -140,18 +140,20 @@ public class WebSocketController {
 
         GameBoard board = roomService.getGameBoard(roomCode);
         if (board != null) {
-            Player player = board.getPlayerById(request.getPlayerId());
-            if (player != null && board.movePlayer(player, request.getNewX(), request.getNewY())) {
-                // ¡Log para depuración!
-                System.out.println(
-                        "[BROADCAST] Jugador " + player.getName() +
-                                " movido a (" + request.getNewX() + ", " + request.getNewY() + ")" +
-                                " en sala: " + roomCode
-                );
-                broadcastGameState2(roomCode, board); // Envía el estado actualizado
+            synchronized (board) {
+                Player player = board.getPlayerById(request.getPlayerId());
+                if (player != null && board.movePlayer(player, request.getNewX(), request.getNewY())) {
+                    System.out.println(
+                            "[BROADCAST] Jugador " + player.getName() +
+                                    " movido a (" + request.getNewX() + ", " + request.getNewY() + ")" +
+                                    " en sala: " + roomCode
+                    );
+                    broadcastGameState2(roomCode, board); // Enviar nuevo estado del juego
+                }
             }
         }
     }
+
 
     private void broadcastGameState2(String roomCode, GameBoard board) {
         Map<String, Object> response = new HashMap<>();

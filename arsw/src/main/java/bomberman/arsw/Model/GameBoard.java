@@ -148,22 +148,16 @@ public class GameBoard {
     }
 
     public boolean isValidMove(int x, int y) {
-        // Verificar límites del mapa
         if (x < 0 || x >= gameMap.getWidth() || y < 0 || y >= gameMap.getHeight()) {
             return false;
         }
 
-        // Verificar si hay pared en la celda
-        if (gameMap.getCell(x, y).isWall()) {
+        Cell cell = gameMap.getCell(x, y);
+
+        // No permitir si hay pared, bomba o jugadores ya en la celda
+        if (cell.isWall() || cell.hasBomb() || cell.hasPlayer()) {
             return false;
         }
-
-        // Verificar si hay bomba en la celda
-        if (bombs.stream().anyMatch(b -> b.getX() == x && b.getY() == y)) {
-            return false;
-        }
-
-
 
         return true;
     }
