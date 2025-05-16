@@ -96,8 +96,8 @@ public class WebSocketController {
             Map<String, Object> response = new HashMap<>();
             response.put("type", "GAME_START");
             response.put("config", configData);
-            response.put("players", players.stream().map(Player::toMap).toList());
-            response.put("map", convertGameMapToMap(board.getGameMap()));
+            response.put("players", playersData);
+            response.put("map", mapData);
 
             // 9. Enviar mensaje a los clientes
             messagingTemplate.convertAndSend("/topic/room/" + roomCode, response);
@@ -105,13 +105,7 @@ public class WebSocketController {
         }
     }
 
-    private Map<String, Object> convertGameMapToMap(GameMap gameMap) {
-        Map<String, Object> mapData = new HashMap<>();
-        mapData.put("width", gameMap.getWidth());
-        mapData.put("height", gameMap.getHeight());
-        mapData.put("cells", gameMap.getCellStates());
-        return mapData;
-    }
+
 
     @MessageMapping("/room/{roomCode}/leave")
     public void leaveRoom(@DestinationVariable String roomCode, @Payload PlayerActionRequest request) {
