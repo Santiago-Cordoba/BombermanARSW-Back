@@ -55,9 +55,13 @@ public class WebSocketController {
     public void startGame(@DestinationVariable String roomCode, @Payload Map<String, Object> payload) {
         String playerId = (String) payload.get("playerId");
 
+        Map<String, Object> configPayload = (Map<String, Object>) payload.get("config");
+        int duration = configPayload != null ? (int) configPayload.get("duration") : 300; // Default 5 min
+        int lives = configPayload != null ? (int) configPayload.get("lives") : 3; // Default 3 vidas
+
         if (roomService.isHost(roomCode, playerId) && roomService.canStartGame(roomCode)) {
             // 1. Crear configuración
-            GameConfig config = new GameConfig(300, 3); // 5 min, 3 vidas
+            GameConfig config = new GameConfig(duration, lives); // 5 min, 3 vidas
 
             // 2. Obtener jugadores
             List<Player> players = roomService.getPlayersInRoom(roomCode);
@@ -92,13 +96,21 @@ public class WebSocketController {
             Map<String, Object> response = new HashMap<>();
             response.put("type", "GAME_START");
             response.put("config", configData);
-            response.put("players", playersData);
-            response.put("map", mapData);
+            response.put("players", players.stream().map(Player::toMap).toList());
+            response.put("map", convertGameMapToMap(board.getGameMap()));
 
             // 9. Enviar mensaje a los clientes
             messagingTemplate.convertAndSend("/topic/room/" + roomCode, response);
             messagingTemplate.convertAndSend("/topic/game/" + roomCode, response);
         }
+    }
+
+    private Map<String, Object> convertGameMapToMap(GameMap gameMap) {
+        Map<String, Object> mapData = new HashMap<>();
+        mapData.put("width", gameMap.getWidth());
+        mapData.put("height", gameMap.getHeight());
+        mapData.put("cells", gameMap.getCellStates());
+        return mapData;
     }
 
     @MessageMapping("/room/{roomCode}/leave")
