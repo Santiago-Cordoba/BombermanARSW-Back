@@ -41,6 +41,9 @@ public class GameBoard {
     }
 
     private void spawnInitialPowerUps() {
+        boolean hasInvincibility = powerUps.stream()
+                .anyMatch(pu -> pu.getType() == PowerUpType.INVINCIBILITY);
+
         // Obtener las posiciones de spawn de los jugadores
         Set<String> playerSpawnPositions = new HashSet<>();
         for (Player player : players) {
@@ -71,17 +74,19 @@ public class GameBoard {
             Cell cell = emptyCells.get(i);
 
             PowerUp powerUp;
-            int choice = rand.nextInt(2); // 0 = vida, 1 = invencibilidad
+            int choice = rand.nextInt(2); // 0 = LIFE, 1 = INVINCIBILITY
 
-            if (choice == 0) {
+            if (choice == 0 || hasInvincibility) {
                 powerUp = new LifeUpPowerUp(1, cell.getX(), cell.getY());
             } else {
                 powerUp = new InvincibilityPowerUp(cell.getX(), cell.getY());
+                hasInvincibility = true; // marcar que ya fue añadido
             }
 
             cell.addPowerUp(powerUp);
             powerUps.add(powerUp);
         }
+
     }
 
     public String getGameStateJson() {
