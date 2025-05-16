@@ -31,7 +31,7 @@ public class WebSocketController {
 
                 0,  // initial X position
                 0,  // initial Y position
-                3,  // initial lives
+                1,  // initial lives
                 request.getPlayerName(),
                 1   // initial bomb capacity
         );
@@ -53,11 +53,13 @@ public class WebSocketController {
 
     @MessageMapping("/room/{roomCode}/start")
     public void startGame(@DestinationVariable String roomCode, @Payload Map<String, Object> payload) {
+        System.out.println("Received start request: " + payload); // Debug
+
         String playerId = (String) payload.get("playerId");
 
         Map<String, Object> configPayload = (Map<String, Object>) payload.get("config");
         int duration = configPayload != null ? (int) configPayload.get("duration") : 300; // Default 5 min
-        int lives = configPayload != null ? (int) configPayload.get("lives") : 3; // Default 3 vidas
+        int lives = configPayload != null ? (int) configPayload.get("lives") : 5; // Default 3 vidas
 
         if (roomService.isHost(roomCode, playerId) && roomService.canStartGame(roomCode)) {
             // 1. Crear configuración
@@ -68,6 +70,8 @@ public class WebSocketController {
 
             // 3. Crear tablero (esto ahora crea el mapa internamente)
             roomService.createGameBoard(roomCode, config, players);
+
+            players.forEach(p -> p.setLives(config.getLives()));
 
             // 4. Obtener tablero creado
             GameBoard board = roomService.getGameBoard(roomCode);
