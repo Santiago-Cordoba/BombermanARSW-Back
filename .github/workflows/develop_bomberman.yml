@@ -37,16 +37,17 @@ jobs:
           restore-keys: ${{ runner.os }}-m2
 
       - name: Run Tests with JaCoCo
-        run: mvn -B test  # Genera el reporte jacoco.xml
+        run: mvn -B test -f arsw/pom.xml # Genera el reporte jacoco.xml
 
       - name: Run SonarCloud Analysis
         env:
           SONAR_TOKEN: ${{ secrets.SONAR_TOKEN }}
         run: |
           mvn -B org.sonarsource.scanner.maven:sonar-maven-plugin:sonar \
+            -f arsw/pom.xml \  # Asegúrate de usar -f también aquí
             -Dsonar.projectKey=Santiago-Cordoba_BombermanARSW-Back \
             -Dsonar.organization=tu-org-sonarcloud \
-            -Dsonar.coverage.jacoco.xmlReportPaths=target/site/jacoco/jacoco.xml  # Ruta del reporte JaCoCo
+            -Dsonar.coverage.jacoco.xmlReportPaths=target/site/jacoco/jacoco.xml
 
   build-and-deploy:
     name: Build and Deploy to Azure
