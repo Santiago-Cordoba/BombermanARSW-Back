@@ -43,12 +43,14 @@ jobs:
         env:
           SONAR_TOKEN: ${{ secrets.SONAR_TOKEN }}
         run: |
-          cd arsw  # Entramos al directorio donde está el pom.xml
+          cd arsw  # Entramos al directorio del proyecto
           mvn -B sonar:sonar \
-            -Dsonar.projectKey=santiago-cordoba_bomberman_arsw \
+            -Dsonar.projectKey=Santiago-Cordoba_BombermanARSW-Back \
             -Dsonar.organization=santiago-cordoba \
             -Dsonar.branch.name=develop \
-            -Dsonar.coverage.jacoco.xmlReportPaths=target/site/jacoco/jacoco.xml
+            -Dsonar.coverage.jacoco.xmlReportPaths=target/site/jacoco/jacoco.xml \
+            -Dsonar.java.binaries=target/classes \
+            -Dsonar.sourceEncoding=UTF-8
 
   build-and-deploy:
     name: Build and Deploy to Azure
