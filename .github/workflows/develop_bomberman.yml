@@ -44,8 +44,8 @@ jobs:
           SONAR_TOKEN: ${{ secrets.SONAR_TOKEN }}
         run: |
           mvn -B org.sonarsource.scanner.maven:sonar-maven-plugin:sonar \
-            -f arsw/pom.xml \  # Asegúrate de usar -f también aquí
-            -Dsonar.projectKey=Santiago-Cordoba_BombermanARSW-Back \
+            -f arsw/pom.xml \
+            -Dsonar.projectKey=bomberman_arsw \  # ¡Ajusta este valor!
             -Dsonar.organization=tu-org-sonarcloud \
             -Dsonar.coverage.jacoco.xmlReportPaths=target/site/jacoco/jacoco.xml
 
