@@ -43,10 +43,11 @@ jobs:
         env:
           SONAR_TOKEN: ${{ secrets.SONAR_TOKEN }}
         run: |
-          mvn -B org.sonarsource.scanner.maven:sonar-maven-plugin:sonar \
-            -f arsw/pom.xml \
-            -Dsonar.projectKey=bomberman_arsw \  # ¡Ajusta este valor!
-            -Dsonar.organization=tu-org-sonarcloud \
+          cd arsw  # Entramos al directorio donde está el pom.xml
+          mvn -B sonar:sonar \
+            -Dsonar.projectKey=santiago-cordoba_bomberman_arsw \
+            -Dsonar.organization=santiago-cordoba \
+            -Dsonar.branch.name=develop \
             -Dsonar.coverage.jacoco.xmlReportPaths=target/site/jacoco/jacoco.xml
 
   build-and-deploy:
