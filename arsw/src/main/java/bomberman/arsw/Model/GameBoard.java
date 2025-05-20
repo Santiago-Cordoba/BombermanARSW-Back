@@ -292,7 +292,27 @@ public class GameBoard {
                 PowerUp powerUp = cell.getPowerUp();
                 cell.removePowerUp();
                 powerUps.remove(powerUp);
+
             }
         }
     }
+
+    public Player checkWinner() {
+        // Si solo queda un jugador con vidas, es el ganador
+        List<Player> alivePlayers = players.stream()
+                .filter(p -> p.getLives() > 0)
+                .collect(Collectors.toList());
+
+        if (alivePlayers.size() == 1) {
+            return alivePlayers.get(0);
+        }
+
+        // Si todos los jugadores han muerto, no hay ganador (empate)
+        if (alivePlayers.isEmpty() && !players.isEmpty()) {
+            return null; // Representa empate
+        }
+
+        return null; // Aún no hay ganador
+    }
+
 }
