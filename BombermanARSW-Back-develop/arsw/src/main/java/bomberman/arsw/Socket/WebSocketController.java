@@ -4,6 +4,7 @@ import bomberman.arsw.Model.*;
 import bomberman.arsw.Service.roomService;
 import org.springframework.messaging.handler.annotation.MessageMapping;
 import org.springframework.messaging.simp.SimpMessagingTemplate;
+import org.springframework.scheduling.annotation.Scheduled;
 import org.springframework.stereotype.Controller;
 import org.springframework.messaging.handler.annotation.Payload;
 import org.springframework.messaging.handler.annotation.DestinationVariable;
@@ -162,7 +163,7 @@ public class WebSocketController {
                         "name", p.getName(),
                         "x", p.getX(),
                         "y", p.getY(),
-                        "lives", p.getLives(), // Añadir vidas
+                        "lives", p.getLives(),
                         "bombCapacity", p.getBombCapacity()
                 ))
                 .collect(Collectors.toList()));
@@ -286,6 +287,54 @@ public class WebSocketController {
         }
     }
 
+    @Scheduled(fixedRate = 100) // cada 100ms
+    public void broadcastGameState() {
+        for (String roomCode : roomService.getAllRoomCodes()) {
+            GameBoard board = roomService.getGameBoard(roomCode);
+            if (board != null) {
+                messagingTemplate.convertAndSend("/topic/game/" + roomCode, Map.of(
+                        "type", "GAME_UPDATE",
+                        "config", Map.of(
+                                "duration", board.getConfig().getDuration(),
+                                "lives", board.getConfig().getLives()
+                        ),
+                        "players", board.getPlayers().stream().map(p -> Map.of(
+                                "id", p.getId(),
+                                "name", p.getName(),
+                                "x", p.getX(),
+                                "y", p.getY(),
+                                "lives", p.getLives(),
+                                "bombCapacity", p.getBombCapacity(),
+                                "bombRange", p.getBombRange(),
+                                "invincible", p.isInvincible()
+                        )).collect(Collectors.toList()),
+                        "map", Map.of(
+                                "width", board.getGameMap().getWidth(),
+                                "height", board.getGameMap().getHeight(),
+                                "cells", board.getGameMap().getCellStates()
+                        ),
+                        "bombs", board.getBombs().stream().map(b -> Map.of(
+                                "id", b.getId(),
+                                "x", b.getX(),
+                                "y", b.getY(),
+                                "timer", b.getTimer(),
+                                "range", b.getRange(),
+                                "playerId", b.getPlayerId()
+                        )).collect(Collectors.toList()),
+                        "powerUps", board.getPowerUps().stream().map(pu -> Map.of(
+                                "type", pu.getType().name(),
+                                "x", pu.getX(),
+                                "y", pu.getY()
+                        )).collect(Collectors.toList()),
+                        "explosions", board.getExplosions().stream().map(ex -> Map.of(
+                                "x", ex.getX(),
+                                "y", ex.getY(),
+                                "isCenter", ex.isCenter()
+                        )).collect(Collectors.toList())
+                ));
+            }
+        }
+    }
 
 
 }

@@ -12,6 +12,7 @@ public class GameBoard {
     private final GameMap gameMap;
     private final List<Bomb> bombs;
     private final List<PowerUp> powerUps;
+    private final List<Explosion> explosions = new ArrayList<>();
 
     public GameBoard(GameConfig config, List<Player> players, GameMap gameMap) {
         this.config = config;
@@ -75,16 +76,17 @@ public class GameBoard {
     public String getGameStateJson() {
         try {
             return String.format(
-                    "{\"config\":%s,\"players\":[%s],\"map\":%s,\"bombs\":[%s],\"powerUps\":[%s]}",
+                    "{\"config\":%s,\"players\":[%s],\"map\":%s,\"bombs\":[%s],\"powerUps\":[%s],\"explosions\":[%s]}",
                     config.toJsonString(),
                     players.stream().map(Player::toJsonString).collect(Collectors.joining(",")),
                     gameMap.toJsonString(),
                     bombs.stream().map(Bomb::toJsonString).collect(Collectors.joining(",")),
-                    powerUps.stream().map(PowerUp::toJsonString).collect(Collectors.joining(","))
-
+                    powerUps.stream().map(PowerUp::toJsonString).collect(Collectors.joining(",")),
+                    explosions.stream().map(Explosion::toJsonString).collect(Collectors.joining(","))
             );
         } catch (Exception e) {
             e.printStackTrace();
+
             return "{\"error\":\"Failed to generate game state\"}";
         }
 
@@ -215,6 +217,22 @@ public class GameBoard {
         explodeDirection(bomb.getX(), bomb.getY(), 1, 0, bomb.getRange(), affectedCells);
         explodeDirection(bomb.getX(), bomb.getY(), -1, 0, bomb.getRange(), affectedCells);
 
+        explosions.clear(); // limpia explosiones anteriores
+
+        explosions.add(new Explosion(bomb.getX(), bomb.getY(), true)); // centro
+        for (int i = 1; i <= bomb.getRange(); i++) {
+            explosions.add(new Explosion(bomb.getX() + i, bomb.getY(), false));
+            explosions.add(new Explosion(bomb.getX() - i, bomb.getY(), false));
+            explosions.add(new Explosion(bomb.getX(), bomb.getY() + i, false));
+            explosions.add(new Explosion(bomb.getX(), bomb.getY() - i, false));
+        }
+
+        // Limpia las explosiones después de 1 segundo
+        ScheduledExecutorService scheduler = Executors.newSingleThreadScheduledExecutor();
+        scheduler.schedule(() -> {
+            explosions.clear();
+        }, 3, TimeUnit.SECONDS);
+
         processAffectedCells(affectedCells, bomb.getOwner());
     }
 
@@ -264,4 +282,21 @@ public class GameBoard {
             }
         }
     }
+
+    // Agrega esto en GameBoard.java
+    public void forceExplodeBombAt(int x, int y) {
+        Bomb target = bombs.stream()
+                .filter(b -> b.getX() == x && b.getY() == y)
+                .findFirst()
+                .orElse(null);
+
+        if (target != null) {
+            explodeBomb(target);
+        }
+    }
+
+    public List<Explosion> getExplosions() {
+        return new ArrayList<>(explosions);
+    }
+
 }

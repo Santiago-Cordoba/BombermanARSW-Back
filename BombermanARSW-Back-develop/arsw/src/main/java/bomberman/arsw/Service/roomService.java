@@ -3,10 +3,7 @@ package bomberman.arsw.Service;
 import bomberman.arsw.Model.*;
 import org.springframework.stereotype.Service;
 
-import java.util.HashMap;
-import java.util.List;
-import java.util.Map;
-import java.util.Optional;
+import java.util.*;
 
 @Service
 public class roomService {
@@ -140,7 +137,8 @@ public class roomService {
                 .orElse(List.of());
     }
 
-
-
+    public List<String> getAllRoomCodes() {
+        return new ArrayList<>(gameBoards.keySet());
+    }
 
 }
