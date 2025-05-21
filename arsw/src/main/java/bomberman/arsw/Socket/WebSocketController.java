@@ -360,6 +360,7 @@ public class WebSocketController {
     }
 
 
+    /**
     @MessageMapping("/game/{roomCode}/spawnPowerup")
     public void spawnPowerup(
             @DestinationVariable String roomCode,
@@ -405,6 +406,7 @@ public class WebSocketController {
             }
         }
     }
+     */
 
     @MessageMapping("/game/{roomCode}/collectPowerup")
     public void collectPowerup(
