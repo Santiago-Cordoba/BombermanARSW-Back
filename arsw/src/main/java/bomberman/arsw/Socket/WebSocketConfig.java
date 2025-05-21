@@ -14,7 +14,16 @@ public class WebSocketConfig implements WebSocketMessageBrokerConfigurer {
 
     @Override
     public void configureMessageBroker(MessageBrokerRegistry config) {
-        config.enableSimpleBroker("/topic", "/queue");
+        // Configuración del broker Redis
+        config.enableStompBrokerRelay("/topic", "/queue")
+                .setRelayHost("bombermanCache.redis.cache.windows.net")
+                .setRelayPort(6380)
+                .setClientLogin("default")
+                .setClientPasscode("Mn5XVKNOBncGIYRpPpWldQ1vEEdDmxq2GAzCaH2I7zU=")
+                .setSystemLogin("default")
+                .setSystemPasscode("Mn5XVKNOBncGIYRpPpWldQ1vEEdDmxq2GAzCaH2I7zU=")
+                .setAutoStartup(true);
+
         config.setApplicationDestinationPrefixes("/app");
         config.setUserDestinationPrefix("/user");
     }
@@ -23,6 +32,7 @@ public class WebSocketConfig implements WebSocketMessageBrokerConfigurer {
     public void registerStompEndpoints(StompEndpointRegistry registry) {
         registry.addEndpoint("/ws")
                 .setAllowedOriginPatterns("*")
-                .setHandshakeHandler(new DefaultHandshakeHandler(new TomcatRequestUpgradeStrategy()));
+                .setHandshakeHandler(new DefaultHandshakeHandler(new TomcatRequestUpgradeStrategy()))
+                .withSockJS(); // Opcional: para compatibilidad con navegadores antiguos
     }
 }

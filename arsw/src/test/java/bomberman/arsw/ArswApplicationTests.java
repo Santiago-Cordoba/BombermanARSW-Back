@@ -482,7 +482,7 @@ class ArswApplicationTests {
 		assertEquals(2, states.size());
 		assertTrue((Boolean) states.get(0).get(0).get("isWall"));
 		assertFalse((Boolean) states.get(1).get(1).get("hasPowerUp"));
-		
+
 	}
 }
 
