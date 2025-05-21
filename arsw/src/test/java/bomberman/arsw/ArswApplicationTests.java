@@ -301,8 +301,129 @@ class ArswApplicationTests {
 		assertTrue(player.isInvincible(), "El jugador debe seguir invencible justo después de la explosión");
 	}
 
+	/**
+	 * Verifica que una bomba activa otra bomba cercana al estar en su rango.
+	 *
+	 * Escenario:
+	 * - Se colocan dos bombas:
+	 *   - Bomba A en (5,5)
+	 *   - Bomba B en (7,5)
+	 * - El jugador tiene un rango de explosión de 2.
+	 * - Se fuerza la explosión de la bomba A.
+	 *
+	 * Comprobaciones:
+	 * - La bomba B debe ser alcanzada y removida por la reacción en cadena.
+	 */
+	@Test
+	void testChainReactionTriggersAdjacentBombs() {
+		GameConfig config = new GameConfig(300, 3);
+		Player player = new Player(0, 0, 3, "Bomber", 1);
+		player.increaseBombRange(); // Rango = 2
+		List<Player> players = List.of(player);
 
+		GameMap map = GameMap.createDefaultMap(1);
+		map.getCell(5, 5).setWall(false);
+		map.getCell(6, 5).setWall(false);
+		map.getCell(7, 5).setWall(false);
 
+		GameBoard board = new GameBoard(config, players, map);
+
+		// Bomba A (5,5)
+		Bomb bombA = new Bomb(5, 5, player);
+		board.getBombs().add(bombA);
+		map.placeBomb(5, 5, bombA);
+
+		// Bomba B (7,5)
+		Bomb bombB = new Bomb(7, 5, player);
+		board.getBombs().add(bombB);
+		map.placeBomb(7, 5, bombB);
+
+		// Forzar explosión de bomba A
+		board.forceExplodeBombAt(5, 5);
+
+		// Validar que la bomba B haya sido detonada (ya no está en el tablero)
+		boolean bombBStillExists = board.getBombs().stream()
+				.anyMatch(b -> b.getX() == 7 && b.getY() == 5);
+
+		assertFalse(bombBStillExists, "La explosión debe haber alcanzado y detonado la segunda bomba (7,5)");
+	}
+
+	/**
+	 * Verifica que un jugador no puede recoger un power-up si hay una bomba presente en la misma celda.
+	 *
+	 * Escenario:
+	 * - Se crea un jugador en la posición (1,1) con 3 vidas.
+	 * - En esa misma celda se colocan simultáneamente un power-up de tipo LIFE_UP y una bomba.
+	 * - Se intenta recolectar el power-up.
+	 *
+	 * Comprobaciones:
+	 * - La recolección del power-up debe fallar si hay una bomba en la celda.
+	 * - El jugador no debe aumentar su número de vidas.
+	 * - El power-up debe permanecer en el tablero.
+	 */
+	@Test
+	void testPowerUpNotCollectedIfBombIsPresentInCell() {
+		GameConfig config = new GameConfig(300, 3);
+		Player player = new Player(1, 1, 3, "TestPlayer", 1);
+		List<Player> players = List.of(player);
+
+		GameMap map = GameMap.createDefaultMap(1);
+		GameBoard board = new GameBoard(config, players, map);
+
+		LifeUpPowerUp powerUp = new LifeUpPowerUp(1);
+		powerUp.setPosition(1, 1);
+		Bomb bomb = new Bomb(1, 1, player);
+
+		// Configurar la celda con bomba y power-up
+		map.getCell(1, 1).setPowerUp(powerUp);
+		map.getCell(1, 1).setBomb(bomb);
+		board.getPowerUps().add(powerUp);
+
+		// Intentar recoger el power-up
+		boolean collected = board.collectPowerUp(player.getId(), 1, 1);
+
+		// Validaciones
+		assertFalse(collected, "El power-up no debe ser recogido si hay una bomba en la celda");
+		assertEquals(3, player.getLives(), "Las vidas del jugador no deben cambiar");
+		assertTrue(map.getCell(1, 1).hasPowerUp(), "El power-up debe seguir en la celda");
+	}
+
+	/**
+	 * Verifica que un jugador no pueda moverse a una celda ocupada por una pared.
+	 *
+	 * Escenario:
+	 * - Se inicializa un jugador en la posición (1,1).
+	 * - Se configura una pared en la celda adyacente (1,2).
+	 * - Se intenta mover al jugador hacia esa celda con pared.
+	 *
+	 * Comprobaciones:
+	 * - El movimiento debe ser rechazado.
+	 * - La posición del jugador no debe cambiar.
+	 */
+	@Test
+	void testPlayerCannotMoveIntoWall() {
+		GameConfig config = new GameConfig(300, 3);
+		Player player = new Player(1, 1, 3, "TestPlayer", 1);
+		List<Player> players = List.of(player);
+
+		GameMap map = GameMap.createDefaultMap(1);
+		GameBoard board = new GameBoard(config, players, map);
+
+		// Ubicar jugador en (1,1)
+		map.placePlayer(1, 1, player);
+
+		// Establecer una pared en (1,2)
+		Cell wallCell = map.getCell(1, 2);
+		wallCell.setWall(true);
+
+		// Intentar mover al jugador hacia la pared
+		boolean moved = board.movePlayer(player, 1, 2);
+
+		// Validaciones
+		assertFalse(moved, "El jugador no debe poder moverse a una celda con pared");
+		assertEquals(1, player.getX(), "La posición X del jugador no debe cambiar");
+		assertEquals(1, player.getY(), "La posición Y del jugador no debe cambiar");
+	}
 
 
 

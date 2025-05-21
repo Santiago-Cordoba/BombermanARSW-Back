@@ -28,4 +28,6 @@ public class Explosion {
         map.put("isCenter", isCenter);
         return map;
     }
+
+
 }
