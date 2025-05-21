@@ -41,13 +41,11 @@ public class GameBoard {
     }
 
     private void spawnInitialPowerUps() {
-        // Obtener las posiciones de spawn de los jugadores
         Set<String> playerSpawnPositions = new HashSet<>();
         for (Player player : players) {
             playerSpawnPositions.add(player.getX() + "," + player.getY());
         }
 
-        // Añadir un área de seguridad alrededor de cada spawn (3x3)
         for (Player player : players) {
             for (int dy = -1; dy <= 1; dy++) {
                 for (int dx = -1; dx <= 1; dx++) {
@@ -59,7 +57,6 @@ public class GameBoard {
         List<Cell> emptyCells = gameMap.getEmptyCells()
                 .stream()
                 .filter(cell -> {
-                    // Verificar que la celda no esté en ninguna posición de spawn
                     String cellPos = cell.getX() + "," + cell.getY();
                     return !cell.isWall() &&
                             !cell.hasBomb() &&
@@ -70,12 +67,15 @@ public class GameBoard {
 
         Collections.shuffle(emptyCells);
 
-        // Colocar exactamente 5 power-ups o menos si no hay suficientes celdas vacías
         int powerUpsToSpawn = Math.min(5, emptyCells.size());
 
         for (int i = 0; i < powerUpsToSpawn; i++) {
             Cell cell = emptyCells.get(i);
-            PowerUp powerUp = new LifeUpPowerUp(1, cell.getX(), cell.getY());
+            PowerUp powerUp;
+
+            powerUp = new BombRangePowerUp(cell.getX(), cell.getY());
+
+
             cell.addPowerUp(powerUp);
             powerUps.add(powerUp);
         }
@@ -169,10 +169,8 @@ public class GameBoard {
             return false;
         }
 
-        // Remover de la posición anterior
         gameMap.removePlayer(player.getX(), player.getY(), player);
 
-        // Verificar si hay power-up en la nueva posición
         Cell newCell = gameMap.getCell(newX, newY);
         if (newCell.hasPowerUp()) {
             PowerUp powerUp = newCell.getPowerUp();
@@ -242,7 +240,6 @@ public class GameBoard {
             int x = startX + (dx * i);
             int y = startY + (dy * i);
 
-            // Verificar si la posición es válida
             if (!gameMap.isValidPosition(x, y)) {
                 break;
             }
@@ -250,12 +247,10 @@ public class GameBoard {
             Cell cell = gameMap.getCell(x, y);
             affectedCells.add(cell);
 
-            // Si hay una pared indestructible, detener la explosión en esta dirección
             if (cell.isWall() && !cell.isDestructible()) {
                 break;
             }
 
-            // Si hay una pared destructible, añadirla y detener la explosión
             if (cell.isWall() && cell.isDestructible()) {
                 break;
             }

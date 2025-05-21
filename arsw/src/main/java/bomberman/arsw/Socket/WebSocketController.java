@@ -413,9 +413,8 @@ public class WebSocketController {
 
         GameBoard board = roomService.getGameBoard(roomCode);
         if (board != null) {
-            synchronized (board) { // Añadir sincronización
+            synchronized (board) {
                 try {
-                    // Obtener el powerup en esa posición
                     Optional<PowerUp> powerupOpt = board.getPowerUpAt(request.getX(), request.getY());
 
                     if (powerupOpt.isPresent()) {
@@ -423,10 +422,7 @@ public class WebSocketController {
                         Player player = board.getPlayerById(request.getPlayerId());
 
                         if (player != null) {
-                            // Aplicar efecto
                             powerup.applyEffect(player);
-
-                            // Remover powerup del tablero
                             board.removePowerUp(powerup);
 
                             // Notificar a todos los clientes
@@ -434,6 +430,7 @@ public class WebSocketController {
                                     "/topic/game/" + roomCode + "/powerup",
                                     Map.of(
                                             "type", "POWERUP_COLLECTED",
+                                            "powerUpType", powerup.getType().name(), // Incluir tipo
                                             "x", powerup.getX(),
                                             "y", powerup.getY(),
                                             "playerId", player.getId(),
@@ -441,13 +438,11 @@ public class WebSocketController {
                                     )
                             );
 
-                            // Actualizar estado del juego
                             sendGameUpdate(roomCode, board);
                         }
                     }
                 } catch (Exception e) {
                     e.printStackTrace();
-                    // Manejar error adecuadamente
                 }
             }
         }

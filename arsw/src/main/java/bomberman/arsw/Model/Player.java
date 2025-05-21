@@ -1,9 +1,5 @@
 package bomberman.arsw.Model;
 
-import lombok.Getter;
-import lombok.Setter;
-
-import java.util.HashMap;
 import java.util.Map;
 import java.util.UUID;
 
@@ -35,6 +31,8 @@ public class Player {
         this.bombs = bombs;
         this.ready = false;
         this.host = false;
+        this.bombCapacity = bombCapacity;
+        this.bombRange = 1;
         speed = 1;
     }
 
@@ -42,17 +40,22 @@ public class Player {
         return bombRange;
     }
 
-    public void increaseBombRange() {
+    public void increaseBombRange(int i) {
         bombRange++;
     }
 
     public Map<String, Object> toMap() {
-        Map<String, Object> map = new HashMap<>();
-        map.put("id", this.id);
-        map.put("name", this.name);
-        map.put("x", this.x);
-        map.put("y", this.y);
-        return map;
+        return Map.of(
+                "id", id,
+                "name", name,
+                "x", x,
+                "y", y,
+                "lives", lives,
+                "bombCapacity", bombCapacity,
+                "bombRange", bombRange,
+                "ready", ready,
+                "isHost", host
+        );
     }
 
     public void setHost(boolean host) {

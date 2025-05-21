@@ -1,8 +1,8 @@
 package bomberman.arsw.Service;
 
 import bomberman.arsw.Model.*;
+import org.springframework.data.redis.core.RedisTemplate;
 import org.springframework.stereotype.Service;
-
 import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
@@ -10,10 +10,16 @@ import java.util.Optional;
 
 @Service
 public class roomService {
-    private final RoomManager roomManager;
 
-    public roomService(RoomManager roomManager) {
+    private final RoomManager roomManager;
+    private final RedisTemplate<String, GameBoard> redisTemplate;
+
+    private Map<String, GameBoard> gameBoards = new HashMap<String, GameBoard>();
+    private Map<String, GameBoard> activeBoards = new HashMap<>();
+
+    public roomService(RoomManager roomManager, RedisTemplate<String, GameBoard> redisTemplate) {
         this.roomManager = roomManager;
+        this.redisTemplate = redisTemplate;
     }
 
     public Room createOrGetRoom(String roomCode) {
@@ -24,21 +30,10 @@ public class roomService {
         return Optional.ofNullable(roomManager.getRoom(roomCode));
     }
 
-    private Map<String, GameBoard> gameBoards = new HashMap<String, GameBoard>();
-    private Map<String, GameBoard> savedStates = new HashMap<>();
-    private Map<String, GameBoard> activeBoards = new HashMap<>();
-
     public void createGameBoard(String roomCode, GameConfig config, List<Player> players) {
-        // Crear el mapa primero
         GameMap gameMap = GameMap.createDefaultMap(players.size());
-
-        // Luego crear el tablero con el mapa
         GameBoard board = new GameBoard(config, players, gameMap);
-
-        // Guardar el tablero en el mapa
         gameBoards.put(roomCode, board);
-
-        // Posicionar jugadores en el mapa
         positionPlayers(board, players);
     }
 
@@ -47,13 +42,11 @@ public class roomService {
         int width = map.getWidth();
         int height = map.getHeight();
 
-        // Posiciones iniciales según número de jugadores
         int[][] startPositions = {
                 {1, 1},
-                {width-2, height-2},// Jugador 1: esquina superior izquierda
-                {width-2, 1},           // Jugador 2: esquina superior derecha
-                {1, height-2},          // Jugador 3: esquina inferior izquierda
-                     // Jugador 4: esquina inferior derecha
+                {width-2, height-2},
+                {width-2, 1},
+                {1, height-2},
         };
 
         for (int i = 0; i < players.size(); i++) {
@@ -64,25 +57,7 @@ public class roomService {
         }
     }
 
-    private void placeInitialPlayers(GameBoard board, List<Player> players) {
-        GameMap map = board.getGameMap();
-
-        // Posiciones iniciales según número de jugadores
-        int[][] startPositions = {
-                {1, 1},         // Jugador 1: esquina superior izquierda
-                {map.getWidth()-2, 1},  // Jugador 2: esquina superior derecha
-                {1, map.getHeight()-2}, // Jugador 3: esquina inferior izquierda
-                {map.getWidth()-2, map.getHeight()-2} // Jugador 4: esquina inferior derecha
-        };
-
-        for (int i = 0; i < players.size(); i++) {
-            Player p = players.get(i);
-            int[] pos = startPositions[i];
-            p.setPosition(pos[0], pos[1]);
-            map.placePlayer(pos[0], pos[1], p);
-        }
-    }
-        public GameBoard getGameBoard(String roomCode) {
+    public GameBoard getGameBoard(String roomCode) {
         return gameBoards.get(roomCode);
     }
 
@@ -97,7 +72,6 @@ public class roomService {
         if (roomOpt.isPresent()) {
             Room room = roomOpt.get();
             room.removePlayer(playerId);
-
             if (room.getPlayers().isEmpty()) {
                 roomManager.removeRoom(roomCode);
             }
@@ -112,7 +86,6 @@ public class roomService {
                     Optional<Player> playerOpt = room.getPlayers().stream()
                             .filter(p -> p.getId().equals(playerId))
                             .findFirst();
-
                     playerOpt.ifPresent(player -> player.setReady(!player.isReady()));
                     return playerOpt.isPresent();
                 })
@@ -142,20 +115,16 @@ public class roomService {
                 .orElse(List.of());
     }
 
-    // Guardar en memoria o en archivo (según tu diseño)
+
     public void saveGameState(String roomCode, GameBoard board) {
-        savedStates.put(roomCode, board); // Un mapa temporal por ejemplo
+        redisTemplate.opsForValue().set(roomCode, board);
     }
 
     public GameBoard loadGameState(String roomCode) {
-        return savedStates.get(roomCode); // O leer de un archivo
+        return redisTemplate.opsForValue().get(roomCode);
     }
 
     public void setGameBoard(String roomCode, GameBoard board) {
         activeBoards.put(roomCode, board);
     }
-
-
-
-
 }
