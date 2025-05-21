@@ -19,8 +19,10 @@ public class GameBoard {
         this.bombs = new ArrayList<>();
         this.powerUps = new ArrayList<>();
         this.gameMap = gameMap;
-        positionPlayers();
-        spawnInitialPowerUps();
+        this.positionPlayers();
+        this.spawnInitialPowerUps();
+
+        System.out.println("PowerUps iniciales generados: " + this.powerUps.size());
     }
 
     private void positionPlayers() {
@@ -313,6 +315,16 @@ public class GameBoard {
         }
 
         return null; // Aún no hay ganador
+    }
+
+    public boolean removePowerUp(PowerUp powerUp) {
+        return powerUps.remove(powerUp);
+    }
+
+    public Optional<PowerUp> getPowerUpAt(int x, int y) {
+        return powerUps.stream()
+                .filter(pu -> pu.getX() == x && pu.getY() == y)
+                .findFirst();
     }
 
 }

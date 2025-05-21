@@ -25,6 +25,8 @@ public class roomService {
     }
 
     private Map<String, GameBoard> gameBoards = new HashMap<String, GameBoard>();
+    private Map<String, GameBoard> savedStates = new HashMap<>();
+    private Map<String, GameBoard> activeBoards = new HashMap<>();
 
     public void createGameBoard(String roomCode, GameConfig config, List<Player> players) {
         // Crear el mapa primero
@@ -138,6 +140,19 @@ public class roomService {
         return getRoom(roomCode)
                 .map(Room::getPlayers)
                 .orElse(List.of());
+    }
+
+    // Guardar en memoria o en archivo (según tu diseño)
+    public void saveGameState(String roomCode, GameBoard board) {
+        savedStates.put(roomCode, board); // Un mapa temporal por ejemplo
+    }
+
+    public GameBoard loadGameState(String roomCode) {
+        return savedStates.get(roomCode); // O leer de un archivo
+    }
+
+    public void setGameBoard(String roomCode, GameBoard board) {
+        activeBoards.put(roomCode, board);
     }
 
 
