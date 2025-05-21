@@ -322,4 +322,15 @@ public class GameBoard {
                 .findFirst();
     }
 
+    public void forceExplodeBombAt(int x, int y) {
+        Bomb target = bombs.stream()
+                .filter(b -> b.getX() == x && b.getY() == y)
+                .findFirst()
+                .orElse(null);
+
+        if (target != null) {
+            explodeBomb(target);
+        }
+    }
+
 }

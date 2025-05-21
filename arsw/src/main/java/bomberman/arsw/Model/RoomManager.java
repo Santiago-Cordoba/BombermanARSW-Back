@@ -1,15 +1,16 @@
 package bomberman.arsw.Model;
 
+import java.util.List;
 import java.util.Map;
 import java.util.concurrent.ConcurrentHashMap;
+import java.util.concurrent.CopyOnWriteArrayList;
+
 import org.springframework.stereotype.Component;
 
-@Component // o @Service
+@Component
 public class RoomManager {
-    // Almacena todas las salas activas usando ConcurrentHashMap para seguridad en hilos
     private final Map<String, Room> rooms = new ConcurrentHashMap<>();
 
-    // Resto del código permanece igual...
     public synchronized Room getOrCreateRoom(String code) {
         return rooms.computeIfAbsent(code, Room::new);
     }
@@ -24,5 +25,13 @@ public class RoomManager {
 
     public boolean roomExists(String code) {
         return rooms.containsKey(code);
+    }
+
+    // Nuevo método añadido para sincronización con Redis
+    public synchronized void updateRoomPlayers(String roomCode, List<Player> players) {
+        Room room = rooms.get(roomCode);
+        if (room != null) {
+            room.setPlayers(new CopyOnWriteArrayList<>(players));
+        }
     }
 }

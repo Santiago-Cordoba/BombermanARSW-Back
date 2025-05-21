@@ -1,13 +1,12 @@
 package bomberman.arsw.Model;
 
-import java.util.ArrayList;
+import java.io.Serializable;
 import java.util.List;
 import java.util.concurrent.CopyOnWriteArrayList;
 
-public class Room {
+public class Room implements Serializable {
     private final String code;
-    private final List<Player> players = new CopyOnWriteArrayList<>();
-
+    private List<Player> players = new CopyOnWriteArrayList<>();
 
     public Room(String code) {
         this.code = code;
@@ -18,16 +17,22 @@ public class Room {
     }
 
     public List<Player> getPlayers() {
-        return new ArrayList<>(players);
+        return players;
+    }
+
+    public void setPlayers(List<Player> players) {
+        this.players = new CopyOnWriteArrayList<>(players);
     }
 
     public void addPlayer(Player player) {
         players.add(player);
     }
 
-    public void removePlayer(String playerName) {
-        players.removeIf(p -> p.getName().equals(playerName));
+    public void removePlayer(String playerId) {
+        players.removeIf(p -> p.getId().equals(playerId));
     }
 
-
+    public boolean containsPlayer(String playerId) {
+        return players.stream().anyMatch(p -> p.getId().equals(playerId));
+    }
 }

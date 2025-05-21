@@ -1,9 +1,12 @@
 package bomberman.arsw.Model;
 
+import java.io.Serializable;
 import java.util.Map;
 import java.util.UUID;
 
-public class Player {
+public class Player implements Serializable {
+    // Añade esta constante para controlar la versión de serialización
+    private static final long serialVersionUID = 1L;
 
     private String id;
     private int x;
@@ -17,13 +20,13 @@ public class Player {
     private int bombCapacity = 1;
     private int bombRange = 1;
 
-    // Constructor, getters y setters
-
+    // Constructor sin argumentos requerido para la deserialización
     public Player() {
+        this.id = UUID.randomUUID().toString();
     }
 
     public Player(int x, int y, int lives, String name, int bombs) {
-        this.id = UUID.randomUUID().toString();
+        this(); // Llama al constructor sin argumentos para inicializar el ID
         this.x = x;
         this.y = y;
         this.lives = lives;
@@ -31,10 +34,9 @@ public class Player {
         this.bombs = bombs;
         this.ready = false;
         this.host = false;
-        this.bombCapacity = bombCapacity;
-        this.bombRange = 1;
-        speed = 1;
+        this.speed = 1;
     }
+
 
     public int getBombRange() {
         return bombRange;
