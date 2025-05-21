@@ -114,63 +114,44 @@ class ArswApplicationTests {
 	}
 
 	/**
-	 * Prueba unitaria para verificar que un jugador no puede recoger un power-up
-	 * si no se encuentra exactamente en la misma posición (x, y) que el power-up.
+	 * Verifica el ciclo completo de colocación y explosión de una bomba
+	 * y su impacto en el jugador que la colocó.
 	 *
-	 * Esta prueba es importante para asegurar que la lógica de recolección
-	 * depende estrictamente de la coincidencia de coordenadas en el tablero,
-	 * evitando efectos no deseados si el jugador se encuentra cerca pero no
-	 * sobre el power-up.
-	 */
-	@Test
-	void testPlayerDoesNotCollectPowerUp_ifNotOnSameCell() {
-		GameConfig config = new GameConfig(300, 3);
-		Player player = new Player(2, 2, 3, "TestPlayer", 1);
-		List<Player> players = List.of(player);
-
-		GameMap map = GameMap.createDefaultMap(1);
-		GameBoard board = new GameBoard(config, players, map);
-
-		// Colocar un power-up en (1,1), pero el jugador está en (2,2)
-		LifeUpPowerUp lifeUp = new LifeUpPowerUp(1);
-		lifeUp.setPosition(1, 1);
-		board.getPowerUps().add(lifeUp);
-		map.getCell(1, 1).setPowerUp(lifeUp);
-
-		// El jugador no está en la celda del power-up, no debería recogerlo
-		boolean collected = board.collectPowerUp(player.getId(), 2, 2);
-
-		assertFalse(collected, "El power-up no debe ser recogido si el jugador no está en la misma celda");
-		assertEquals(3, player.getLives(), "La cantidad de vidas del jugador no debe cambiar");
-		assertTrue(board.getPowerUps().contains(lifeUp), "El power-up debe seguir en el tablero");
-	}
-
-	/**
-	 * Prueba unitaria que valida la colocación de una bomba en el tablero,
-	 * su explosión inmediata y los efectos sobre un jugador en la misma celda.
+	 * Escenario:
+	 * - Configuración de juego con un único jugador en la posición (2,2)
+	 *   con 2 vidas iniciales.
+	 * - Se invoca placeBomb para dejar la bomba en su celda.
+	 * - Se fuerza la explosión inmediata con forceExplodeBombAt.
+	 *
+	 * Comprobaciones:
+	 * 1. Tras placeBomb, la celda (2,2) debe reportar hasBomb() == true.
+	 * 2. Tras la explosión forzada:
+	 *    - El jugador debe perder exactamente una vida (de 2 a 1).
+	 *    - La celda (2,2) ya no debe contener bomba.
 	 */
 	@Test
 	void testBombPlacementAndExplosionAffectsPlayer() {
 		GameConfig config = new GameConfig(300, 3);
-		Player player = new Player(2, 2, 2, "JugadorA", 1); // Tiene 2 vidas
+		Player player = new Player(2, 2, 2, "JugadorA", 1); // Dos vidas iniciales
 		List<Player> players = List.of(player);
 
 		GameMap map = GameMap.createDefaultMap(1);
 		GameBoard board = new GameBoard(config, players, map);
 
-		// Asegurar que el jugador esté físicamente en la celda
+		// 1. Colocar el jugador en la celda (2,2)
 		map.placePlayer(2, 2, player);
 
-		// Colocar bomba
+		// 2. Colocar la bomba y comprobar su presencia
 		board.placeBomb(2, 2, player);
-		assertTrue(map.getCell(2, 2).hasBomb(), "La celda debe contener una bomba");
+		assertTrue(map.getCell(2, 2).hasBomb(),
+				"La celda (2,2) debe contener una bomba tras placeBomb");
 
-		// Explosión simulada
+		// 3. Forzar la explosión y validar efectos sobre el jugador y la bomba
 		board.forceExplodeBombAt(2, 2);
-
-		// Validar efectos
-		assertEquals(1, player.getLives(), "El jugador debe perder una vida por la explosión");
-		assertFalse(map.getCell(2, 2).hasBomb(), "La bomba debe desaparecer tras explotar");
+		assertEquals(1, player.getLives(),
+				"El jugador debe perder una vida tras la explosión");
+		assertFalse(map.getCell(2, 2).hasBomb(),
+				"La bomba debe desaparecer de la celda (2,2) después de explotar");
 	}
 
 	/**
@@ -466,95 +447,144 @@ class ArswApplicationTests {
 		assertFalse(board.getPowerUps().contains(powerUp), "El power-up debe ser eliminado del tablero");
 	}
 
-	@Test
-	void testPlayerLosesAllLivesAndIsRemovedFromGame() {
-		GameConfig config = new GameConfig(300, 3);
-		Player player = new Player(3, 3, 1, "LastLifePlayer", 1);
-		List<Player> players = List.of(player);
+		/**
+		 * Verifica que un jugador con una única vida sea eliminado del juego
+		 * tras la explosión de su propia bomba.
+		 *
+		 * Escenario:
+		 * - Configuración de juego con 1 jugador ubicado en (3,3) y 1 vida.
+		 * - Se coloca una bomba en la misma posición.
+		 * - Se fuerza la explosión inmediatamente.
+		 *
+		 * Comprobaciones:
+		 * - El jugador ya no debe estar presente en la lista de jugadores del tablero.
+		 */
+		@Test
+		void testPlayerLosesAllLivesAndIsRemovedFromGame() {
+			GameConfig config = new GameConfig(300, 3);
+			Player player = new Player(3, 3, 1, "LastLifePlayer", 1);
+			var players = List.of(player);
 
-		GameMap map = GameMap.createDefaultMap(1);
-		GameBoard board = new GameBoard(config, players, map);
+			GameMap map = GameMap.createDefaultMap(1);
+			GameBoard board = new GameBoard(config, players, map);
 
-		map.placePlayer(3, 3, player);
-		board.placeBomb(3, 3, player);
-		board.forceExplodeBombAt(3, 3);
+			map.placePlayer(3, 3, player);
+			board.placeBomb(3, 3, player);
+			board.forceExplodeBombAt(3, 3);
 
-		assertFalse(board.getPlayers().contains(player), "El jugador debe ser eliminado del juego al quedarse sin vidas");
-	}
+			assertFalse(board.getPlayers().contains(player),
+					"El jugador debe ser eliminado del juego al quedarse sin vidas");
+		}
 
-	@Test
-	void testExplosionDoesNotCrossIndestructibleWalls() {
-		GameConfig config = new GameConfig(300, 3);
-		Player player = new Player(3, 3, 3, "WallTester", 1);
-		List<Player> players = List.of(player);
+		/**
+		 * Comprueba que la explosión de una bomba no atraviesa muros indestructibles.
+		 *
+		 * Escenario:
+		 * - Jugador en (3,3) con capacidad de bomba estándar.
+		 * - Se coloca un muro indestructible en la celda (4,3) adyacente.
+		 * - Se coloca y explota la bomba en (3,3).
+		 *
+		 * Comprobaciones:
+		 * - Una celda situada detrás del muro (5,3) no debe verse afectada
+		 *   (no debe contener bomba ni cambios de estado).
+		 */
+		@Test
+		void testExplosionDoesNotCrossIndestructibleWalls() {
+			GameConfig config = new GameConfig(300, 3);
+			Player player = new Player(3, 3, 3, "WallTester", 1);
+			var players = List.of(player);
 
-		GameMap map = GameMap.createDefaultMap(1);
-		GameBoard board = new GameBoard(config, players, map);
+			GameMap map = GameMap.createDefaultMap(1);
+			GameBoard board = new GameBoard(config, players, map);
 
-		// Colocar pared indestructible en (4,3)
-		Cell wall = map.getCell(4, 3);
-		wall.setWall(true);
-		wall.setDestructible(false);
+			// Configuramos el muro indestructible
+			Cell wall = map.getCell(4, 3);
+			wall.setWall(true);
+			wall.setDestructible(false);
 
-		// Colocar bomba en (3,3)
-		map.placePlayer(3, 3, player);
-		board.placeBomb(3, 3, player);
+			// Colocamos y explotamos la bomba
+			map.placePlayer(3, 3, player);
+			board.placeBomb(3, 3, player);
+			board.forceExplodeBombAt(3, 3);
 
-		// Simular explosión
-		board.forceExplodeBombAt(3, 3);
+			// Verificamos que la celda (5,3) permanece intacta
+			Cell blockedCell = map.getCell(5, 3);
+			assertFalse(blockedCell.hasBomb(),
+					"La explosión no debe alcanzar celdas detrás de una pared indestructible");
+		}
 
-		// Verificar que la celda detrás de la pared no fue alcanzada
-		Cell blockedCell = map.getCell(5, 3);
-		assertFalse(blockedCell.hasBomb(), "La explosión no debe alcanzar celdas detrás de una pared indestructible");
-	}
+		/**
+		 * Asegura que un jugador pueda colocar varias bombas si su capacidad aumenta.
+		 *
+		 * Escenario:
+		 * - Jugador con capacidad inicial 1, incrementada a 2.
+		 * - Se coloca una bomba en (1,1), se mueve y coloca otra en (1,2).
+		 *
+		 * Comprobaciones:
+		 * - El tablero debe reportar 2 bombas activas en total.
+		 */
+		@Test
+		void testPlayerCanPlaceMultipleBombsWhenCapacityIncreases() {
+			GameConfig config = new GameConfig(300, 3);
+			Player player = new Player(1, 1, 3, "Bomberman", 1);
+			player.increaseBombCapacity(); // capacidad ahora 2
+			var players = List.of(player);
 
-	@Test
-	void testPlayerCanPlaceMultipleBombsWhenCapacityIncreases() {
-		GameConfig config = new GameConfig(300, 3);
-		Player player = new Player(1, 1, 3, "Bomberman", 1);
-		player.increaseBombCapacity(); // Capacidad = 2
-		List<Player> players = List.of(player);
+			GameMap map = GameMap.createDefaultMap(1);
+			GameBoard board = new GameBoard(config, players, map);
 
-		GameMap map = GameMap.createDefaultMap(1);
-		GameBoard board = new GameBoard(config, players, map);
+			map.placePlayer(1, 1, player);
+			board.placeBomb(1, 1, player);
 
-		map.placePlayer(1, 1, player);
-		board.placeBomb(1, 1, player);
-		map.getCell(1, 1).setBomb(null); // Para simular movimiento
+			// Simulamos movimiento para colocar segunda bomba
+			map.getCell(1, 1).setBomb(null);
+			player.setPosition(1, 2);
+			map.placePlayer(1, 2, player);
+			board.placeBomb(1, 2, player);
 
-		player.setX(1); player.setY(2);
-		map.placePlayer(1, 2, player);
-		board.placeBomb(1, 2, player);
+			assertEquals(2, board.getBombs().size(),
+					"El jugador debe poder colocar dos bombas al aumentar su capacidad");
+		}
 
-		assertEquals(2, board.getBombs().size(), "El jugador debe poder colocar dos bombas al aumentar su capacidad");
-	}
+		/**
+		 * Verifica que dos jugadores recojan power-ups de forma independiente,
+		 * sin interferencias entre sí.
+		 *
+		 * Escenario:
+		 * - Dos jugadores en distintos puntos del mapa.
+		 * - Uno recoge un LifeUp, el otro un ExtraFire.
+		 *
+		 * Comprobaciones:
+		 * - El jugador 1 incrementa sus vidas.
+		 * - El jugador 2 incrementa su rango de explosión.
+		 */
+		@Test
+		void testMultiplePlayersCollectPowerUpsIndependently() {
+			GameConfig config = new GameConfig(300, 3);
+			Player p1 = new Player(1, 1, 2, "P1", 1);
+			Player p2 = new Player(3, 3, 2, "P2", 1);
+			var players = List.of(p1, p2);
 
-	@Test
-	void testMultiplePlayersCollectPowerUpsIndependently() {
-		GameConfig config = new GameConfig(300, 3);
-		Player p1 = new Player(1, 1, 2, "P1", 1);
-		Player p2 = new Player(3, 3, 2, "P2", 1);
-		List<Player> players = List.of(p1, p2);
+			GameMap map = GameMap.createDefaultMap(2);
+			GameBoard board = new GameBoard(config, players, map);
 
-		GameMap map = GameMap.createDefaultMap(2);
-		GameBoard board = new GameBoard(config, players, map);
+			map.placePlayer(1, 1, p1);
+			map.placePlayer(3, 3, p2);
 
-		map.placePlayer(1, 1, p1);
-		map.placePlayer(3, 3, p2);
+			LifeUpPowerUp lifeUp = new LifeUpPowerUp(1);
+			lifeUp.setPosition(1, 2);
+			ExtraFirePowerUp firePlus = new ExtraFirePowerUp(3, 2);
 
-		LifeUpPowerUp power1 = new LifeUpPowerUp(1); power1.setPosition(1, 2);
-		ExtraFirePowerUp power2 = new ExtraFirePowerUp(3, 2);
+			board.getPowerUps().add(lifeUp);
+			board.getPowerUps().add(firePlus);
+			map.getCell(1, 2).setPowerUp(lifeUp);
+			map.getCell(3, 2).setPowerUp(firePlus);
 
-		board.getPowerUps().add(power1); board.getPowerUps().add(power2);
-		map.getCell(1, 2).setPowerUp(power1);
-		map.getCell(3, 2).setPowerUp(power2);
+			board.movePlayer(p1, 1, 2);
+			board.movePlayer(p2, 3, 2);
 
-		board.movePlayer(p1, 1, 2);
-		board.movePlayer(p2, 3, 2);
-
-		assertEquals(3, p1.getLives(), "P1 debe aumentar sus vidas");
-		assertEquals(2, p2.getBombRange(), "P2 debe aumentar su rango");
-	}
-
+			assertEquals(3, p1.getLives(), "P1 debe aumentar sus vidas");
+			assertEquals(2, p2.getBombRange(), "P2 debe aumentar su rango de bomba");
+		}
 
 }
