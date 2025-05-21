@@ -26,6 +26,7 @@ public class WebSocketController {
     private final roomService roomService;
     private final SimpMessagingTemplate messagingTemplate;
     private final ScheduledExecutorService scheduledExecutor;
+    private final ObjectMapper objectMapper = new ObjectMapper();
 
     @Autowired
     public WebSocketController(roomService roomService, SimpMessagingTemplate messagingTemplate) {
@@ -34,10 +35,28 @@ public class WebSocketController {
         this.scheduledExecutor = Executors.newSingleThreadScheduledExecutor();
     }
 
+    // Método helper para enviar mensajes cifrados
+    private void sendEncryptedMessage(String destination, Map<String, Object> data) {
+        try {
+            String json = objectMapper.writeValueAsString(data);
+            String encrypted = CryptoUtils.encrypt(json);
+
+            Map<String, Object> encryptedPayload = new HashMap<>();
+            encryptedPayload.put("type", "ENCRYPTED");
+            encryptedPayload.put("payload", encrypted);
+
+            messagingTemplate.convertAndSend(destination, encryptedPayload);
+
+            // Log para depuración
+            System.out.println("Mensaje cifrado enviado a " + destination + ": " + encrypted);
+        } catch (Exception e) {
+            e.printStackTrace();
+        }
+    }
+
     @MessageMapping("/room/{roomCode}/join")
     public void joinRoom(@DestinationVariable String roomCode, @Payload PlayerJoinRequest request) {
         Player player = new Player(
-
                 0,  // initial X position
                 0,  // initial Y position
                 1,  // initial lives
@@ -61,63 +80,50 @@ public class WebSocketController {
 
     @MessageMapping("/room/{roomCode}/start")
     public void startGame(@DestinationVariable String roomCode, @Payload Map<String, Object> payload) {
-        System.out.println("Received start request: " + payload); // Debug
+        System.out.println("Received start request: " + payload);
 
         String playerId = (String) payload.get("playerId");
 
         Map<String, Object> configPayload = (Map<String, Object>) payload.get("config");
-        int duration = configPayload != null ? (int) configPayload.get("duration") : 300; // Default 5 min
-        int lives = configPayload != null ? (int) configPayload.get("lives") : 5; // Default 3 vidas
+        int duration = configPayload != null ? (int) configPayload.get("duration") : 300;
+        int lives = configPayload != null ? (int) configPayload.get("lives") : 5;
 
         if (roomService.isHost(roomCode, playerId) && roomService.canStartGame(roomCode)) {
-            // 1. Crear configuración
-            GameConfig config = new GameConfig(duration, lives); // 5 min, 3 vidas
-
-            // 2. Obtener jugadores
+            GameConfig config = new GameConfig(duration, lives);
             List<Player> players = roomService.getPlayersInRoom(roomCode);
-
-            // 3. Crear tablero (esto ahora crea el mapa internamente)
             roomService.createGameBoard(roomCode, config, players);
 
             players.forEach(p -> p.setLives(config.getLives()));
 
-            // 4. Obtener tablero creado
             GameBoard board = roomService.getGameBoard(roomCode);
             if (board == null) {
                 throw new IllegalStateException("Game board not initialized for room: " + roomCode);
             }
 
-            // 5. Formatear jugadores como Map (suponiendo que tienes un método toMap())
             List<Map<String, Object>> playersData = players.stream()
                     .map(Player::toMap)
                     .toList();
 
-            // 6. Formatear mapa
             GameMap gameMap = board.getGameMap();
             Map<String, Object> mapData = new HashMap<>();
             mapData.put("width", gameMap.getWidth());
             mapData.put("height", gameMap.getHeight());
             mapData.put("cells", gameMap.getCellStates());
 
-            // 7. Formatear configuración como Map (opcional si el frontend no acepta el objeto Java tal cual)
             Map<String, Object> configData = new HashMap<>();
             configData.put("duration", config.getDuration());
             configData.put("lives", config.getLives());
 
-            // 8. Armar mensaje completo
             Map<String, Object> response = new HashMap<>();
             response.put("type", "GAME_START");
             response.put("config", configData);
             response.put("players", playersData);
             response.put("map", mapData);
 
-            // 9. Enviar mensaje a los clientes
-            messagingTemplate.convertAndSend("/topic/room/" + roomCode, response);
-            messagingTemplate.convertAndSend("/topic/game/" + roomCode, response);
+            sendEncryptedMessage("/topic/room/" + roomCode, response);
+            sendEncryptedMessage("/topic/game/" + roomCode, response);
         }
     }
-
-
 
     @MessageMapping("/room/{roomCode}/leave")
     public void leaveRoom(@DestinationVariable String roomCode, @Payload PlayerActionRequest request) {
@@ -126,55 +132,27 @@ public class WebSocketController {
     }
 
     private void sendRoomUpdate(String roomCode) {
-        try {
-            List<Player> players = roomService.getPlayersInRoom(roomCode);
-            String hostId = players.isEmpty() ? "" : players.get(0).getId();
+        List<Player> players = roomService.getPlayersInRoom(roomCode);
+        String hostId = players.isEmpty() ? "" : players.get(0).getId();
 
-            // Crear estructura de datos
-            Map<String, Object> data = new HashMap<>();
-            data.put("host", hostId);
-            data.put("type", "PLAYER_UPDATE");
-            data.put("players", players.stream().map(Player::toMap).collect(Collectors.toList()));
+        Map<String, Object> data = new HashMap<>();
+        data.put("host", hostId);
+        data.put("type", "PLAYER_UPDATE");
+        data.put("players", players.stream().map(Player::toMap).collect(Collectors.toList()));
 
-            // Convertir a JSON y cifrar
-            ObjectMapper mapper = new ObjectMapper();
-            String json = mapper.writeValueAsString(data);
-            String encrypted = CryptoUtils.encrypt(json); // Asegúrate que este método funciona
-
-            // Crear mensaje cifrado
-            Map<String, Object> encryptedPayload = new HashMap<>();
-            encryptedPayload.put("type", "ENCRYPTED");
-            encryptedPayload.put("payload", encrypted);
-
-            // Enviar mensaje
-            messagingTemplate.convertAndSend("/topic/room/" + roomCode, encryptedPayload);
-        } catch (Exception e) {
-            e.printStackTrace();
-        }
+        sendEncryptedMessage("/topic/room/" + roomCode, data);
     }
 
     @MessageMapping("/room/{roomCode}/status")
     public void getGameStatus(@DestinationVariable String roomCode) {
         GameBoard board = roomService.getGameBoard(roomCode);
         if (board != null) {
-            try {
-                Map<String, Object> response = new HashMap<>();
-                response.put("type", "GAME_START");
-                response.put("config", board.getConfig());
-                response.put("players", board.getPlayers());
+            Map<String, Object> response = new HashMap<>();
+            response.put("type", "GAME_START");
+            response.put("config", board.getConfig());
+            response.put("players", board.getPlayers());
 
-                ObjectMapper mapper = new ObjectMapper();
-                String json = mapper.writeValueAsString(response);
-                String encrypted = CryptoUtils.encrypt(json);
-
-                Map<String, Object> encryptedPayload = new HashMap<>();
-                encryptedPayload.put("type", "ENCRYPTED");
-                encryptedPayload.put("payload", encrypted);
-
-                messagingTemplate.convertAndSend("/topic/room/" + roomCode, encryptedPayload);
-            } catch (Exception e) {
-                e.printStackTrace();
-            }
+            sendEncryptedMessage("/topic/room/" + roomCode, response);
         }
     }
 
@@ -193,49 +171,35 @@ public class WebSocketController {
                                     " movido a (" + request.getNewX() + ", " + request.getNewY() + ")" +
                                     " en sala: " + roomCode
                     );
-                    broadcastGameState2(roomCode, board); // Enviar nuevo estado del juego
+                    broadcastGameState(roomCode, board);
                 }
             }
         }
     }
 
+    private void broadcastGameState(String roomCode, GameBoard board) {
+        Map<String, Object> response = new HashMap<>();
+        response.put("type", "GAME_UPDATE");
+        response.put("players", board.getPlayers().stream()
+                .map(p -> Map.of(
+                        "id", p.getId(),
+                        "name", p.getName(),
+                        "x", p.getX(),
+                        "y", p.getY(),
+                        "lives", p.getLives(),
+                        "bombCapacity", p.getBombCapacity()
+                ))
+                .collect(Collectors.toList()));
+        response.put("map", board.getGameMap().getCellStates());
+        response.put("powerUps", board.getPowerUps().stream()
+                .map(pu -> Map.of(
+                        "type", pu.getType().name(),
+                        "x", pu.getX(),
+                        "y", pu.getY()
+                ))
+                .collect(Collectors.toList()));
 
-    private void broadcastGameState2(String roomCode, GameBoard board) {
-        try {
-            Map<String, Object> response = new HashMap<>();
-            response.put("type", "GAME_UPDATE");
-            response.put("players", board.getPlayers().stream()
-                    .map(p -> Map.of(
-                            "id", p.getId(),
-                            "name", p.getName(),
-                            "x", p.getX(),
-                            "y", p.getY(),
-                            "lives", p.getLives(),
-                            "bombCapacity", p.getBombCapacity()
-                    ))
-                    .collect(Collectors.toList()));
-            response.put("map", board.getGameMap().getCellStates());
-            response.put("powerUps", board.getPowerUps().stream()
-                    .map(pu -> Map.of(
-                            "type", pu.getType().name(),
-                            "x", pu.getX(),
-                            "y", pu.getY()
-                    ))
-                    .collect(Collectors.toList()));
-
-            ObjectMapper mapper = new ObjectMapper();
-            String json = mapper.writeValueAsString(response);
-            String encrypted = CryptoUtils.encrypt(json);
-
-            Map<String, Object> encryptedPayload = new HashMap<>();
-            encryptedPayload.put("type", "ENCRYPTED");
-            encryptedPayload.put("payload", encrypted);
-
-            messagingTemplate.convertAndSend("/topic/game/" + roomCode, encryptedPayload);
-
-        } catch (Exception e) {
-            e.printStackTrace();
-        }
+        sendEncryptedMessage("/topic/game/" + roomCode, response);
     }
 
     @MessageMapping("/game/{roomCode}/placeBomb")
@@ -247,70 +211,48 @@ public class WebSocketController {
         if (board != null) {
             Player player = board.getPlayerById(request.getPlayerId());
             if (player != null) {
-                // Colocar la bomba
                 board.placeBomb(player.getX(), player.getY(), player);
                 sendGameUpdate(roomCode, board);
             }
         }
     }
+
     private void sendGameUpdate(String roomCode, GameBoard board) {
-        try {
-            Map<String, Object> response = Map.of(
-                    "type", "GAME_UPDATE",
-                    "players", board.getPlayers().stream()
-                            .map(p -> Map.of(
-                                    "id", p.getId(),
-                                    "name", p.getName(),
-                                    "x", p.getX(),
-                                    "y", p.getY(),
-                                    "lives", p.getLives(),
-                                    "bombCapacity", p.getBombCapacity(),
-                                    "bombRange", p.getBombRange()
-                            ))
-                            .collect(Collectors.toList()),
-                    "bombs", board.getBombs().stream()
-                            .map(b -> Map.of(
-                                    "id", b.getId(),
-                                    "x", b.getX(),
-                                    "y", b.getY(),
-                                    "timer", b.getTimer(),
-                                    "range", b.getRange(),
-                                    "playerId", b.getPlayerId()
-                            ))
-                            .collect(Collectors.toList()),
-                    "map", board.getGameMap().getCellStates(),
-                    "powerUps", board.getPowerUps().stream()
-                            .map(pu -> Map.of(
-                                    "type", pu.getType().name(),
-                                    "x", pu.getX(),
-                                    "y", pu.getY()
-                            ))
-                            .collect(Collectors.toList())
-            );
-
-            ObjectMapper mapper = new ObjectMapper();
-            String json = mapper.writeValueAsString(response);
-            String encrypted = CryptoUtils.encrypt(json);
-
-            Map<String, Object> encryptedPayload = new HashMap<>();
-            encryptedPayload.put("type", "ENCRYPTED");
-            encryptedPayload.put("payload", encrypted);
-
-            messagingTemplate.convertAndSend("/topic/game/" + roomCode, encryptedPayload);
-
-        } catch (Exception e) {
-            e.printStackTrace();
-        }
-    }
-
-
-    private void broadcastGameState(String roomCode, GameBoard board) {
-        messagingTemplate.convertAndSend("/topic/game/" + roomCode, Map.of(
+        Map<String, Object> response = Map.of(
                 "type", "GAME_UPDATE",
-                "state", board.getGameStateJson()
-        ));
-    }
+                "players", board.getPlayers().stream()
+                        .map(p -> Map.of(
+                                "id", p.getId(),
+                                "name", p.getName(),
+                                "x", p.getX(),
+                                "y", p.getY(),
+                                "lives", p.getLives(),
+                                "bombCapacity", p.getBombCapacity(),
+                                "bombRange", p.getBombRange()
+                        ))
+                        .collect(Collectors.toList()),
+                "bombs", board.getBombs().stream()
+                        .map(b -> Map.of(
+                                "id", b.getId(),
+                                "x", b.getX(),
+                                "y", b.getY(),
+                                "timer", b.getTimer(),
+                                "range", b.getRange(),
+                                "playerId", b.getPlayerId()
+                        ))
+                        .collect(Collectors.toList()),
+                "map", board.getGameMap().getCellStates(),
+                "powerUps", board.getPowerUps().stream()
+                        .map(pu -> Map.of(
+                                "type", pu.getType().name(),
+                                "x", pu.getX(),
+                                "y", pu.getY()
+                        ))
+                        .collect(Collectors.toList())
+        );
 
+        sendEncryptedMessage("/topic/game/" + roomCode, response);
+    }
 
     @MessageMapping("/game/{roomCode}/init")
     public void initGame(
@@ -319,90 +261,30 @@ public class WebSocketController {
 
         GameBoard board = roomService.getGameBoard(roomCode);
         if (board != null) {
-            try {
-                Map<String, Object> state = Map.of(
-                        "players", board.getPlayers().stream().map(p -> Map.of(
-                                "id", p.getId(),
-                                "name", p.getName(),
-                                "x", p.getX(),
-                                "y", p.getY(),
-                                "lives", p.getLives()
-                        )).collect(Collectors.toList()),
-                        "map", Map.of(
-                                "width", board.getGameMap().getWidth(),
-                                "height", board.getGameMap().getHeight(),
-                                "cells", board.getGameMap().getCellStates()
-                        ),
-                        "config", Map.of(
-                                "duration", board.getConfig().getDuration(),
-                                "lives", board.getConfig().getLives()
-                        )
-                );
+            Map<String, Object> state = Map.of(
+                    "players", board.getPlayers().stream().map(p -> Map.of(
+                            "id", p.getId(),
+                            "name", p.getName(),
+                            "x", p.getX(),
+                            "y", p.getY(),
+                            "lives", p.getLives()
+                    )).collect(Collectors.toList()),
+                    "map", Map.of(
+                            "width", board.getGameMap().getWidth(),
+                            "height", board.getGameMap().getHeight(),
+                            "cells", board.getGameMap().getCellStates()
+                    ),
+                    "config", Map.of(
+                            "duration", board.getConfig().getDuration(),
+                            "lives", board.getConfig().getLives()
+                    )
+            );
 
-                Map<String, Object> response = new HashMap<>();
-                response.put("type", "GAME_UPDATE");
-                response.put("state", state);
+            Map<String, Object> response = new HashMap<>();
+            response.put("type", "GAME_UPDATE");
+            response.put("state", state);
 
-                ObjectMapper mapper = new ObjectMapper();
-                String json = mapper.writeValueAsString(response);
-                String encrypted = CryptoUtils.encrypt(json);
-
-                Map<String, Object> encryptedPayload = new HashMap<>();
-                encryptedPayload.put("type", "ENCRYPTED");
-                encryptedPayload.put("payload", encrypted);
-
-                messagingTemplate.convertAndSend("/topic/game/" + roomCode, encryptedPayload);
-
-            } catch (Exception e) {
-                e.printStackTrace();
-            }
-        }
-    }
-
-
-    @MessageMapping("/game/{roomCode}/spawnPowerup")
-    public void spawnPowerup(
-            @DestinationVariable String roomCode,
-            @Payload PowerupPosition position) {
-
-        GameBoard board = roomService.getGameBoard(roomCode);
-        if (board != null) {
-            synchronized (board) {
-                try {
-                    LifeUpPowerUp powerup = new LifeUpPowerUp();
-                    powerup.setPosition(position.getRow(), position.getCol());
-                    board.addPowerUp(powerup);
-
-                    // Cambiar el formato del mensaje para que coincida con lo que espera el frontend
-                    messagingTemplate.convertAndSend(
-                            "/topic/game/" + roomCode + "/powerup",
-                            Map.of(
-                                    "row", position.getRow(),
-                                    "col", position.getCol(),
-                                    "show", true,
-                                    "type", "LIFE_UP" // Añadir tipo para consistencia
-                            )
-                    );
-
-                    scheduledExecutor.schedule(() -> {
-                        synchronized (board) {
-                            if (board.getPowerUps().contains(powerup)) {
-                                board.removePowerUp(powerup);
-                                messagingTemplate.convertAndSend(
-                                        "/topic/game/" + roomCode + "/powerup",
-                                        Map.of(
-                                                "row", position.getRow(),
-                                                "col", position.getCol(),
-                                                "show", false
-                                        )
-                                );
-                            }
-                        }
-                    }, 10, TimeUnit.SECONDS);
-                } catch (Exception e) {
-                    e.printStackTrace();
-                }
-            }
+            sendEncryptedMessage("/topic/game/" + roomCode, response);
         }
     }
 
@@ -425,12 +307,12 @@ public class WebSocketController {
                             powerup.applyEffect(player);
                             board.removePowerUp(powerup);
 
-                            // Notificar a todos los clientes
+                            // Mensaje sobre el powerup (no cifrado para este ejemplo)
                             messagingTemplate.convertAndSend(
                                     "/topic/game/" + roomCode + "/powerup",
                                     Map.of(
                                             "type", "POWERUP_COLLECTED",
-                                            "powerUpType", powerup.getType().name(), // Incluir tipo
+                                            "powerUpType", powerup.getType().name(),
                                             "x", powerup.getX(),
                                             "y", powerup.getY(),
                                             "playerId", player.getId(),
@@ -452,21 +334,20 @@ public class WebSocketController {
     public void guardarEstado(@DestinationVariable String roomCode) {
         GameBoard board = roomService.getGameBoard(roomCode);
         if (board != null) {
-            roomService.saveGameState(roomCode, board); // Este método debe existir en roomService
+            roomService.saveGameState(roomCode, board);
             System.out.println("Estado del juego guardado para la sala " + roomCode);
+            GameBoard loadedBoard = roomService.loadGameState("testRoom");
+            System.out.println("Loaded game board: " + loadedBoard);
         }
     }
 
     @MessageMapping("/game/{roomCode}/leer")
     public void leerEstado(@DestinationVariable String roomCode) {
-        GameBoard board = roomService.loadGameState(roomCode); // Este método también debe existir
+        GameBoard board = roomService.loadGameState(roomCode);
         if (board != null) {
-            roomService.setGameBoard(roomCode, board); // Este método debería permitir cargar el board
-            sendGameUpdate(roomCode, board); // Reutilizas tu método para enviar el estado al cliente
+            roomService.setGameBoard(roomCode, board);
+            sendGameUpdate(roomCode, board);
             System.out.println("Estado del juego cargado para la sala " + roomCode);
         }
     }
-
-
-
 }
