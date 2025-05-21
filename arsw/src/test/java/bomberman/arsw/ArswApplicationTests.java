@@ -425,6 +425,46 @@ class ArswApplicationTests {
 		assertEquals(1, player.getY(), "La posición Y del jugador no debe cambiar");
 	}
 
+	/**
+	 * Verifica que un jugador recoge automáticamente un power-up
+	 * al moverse a la celda que lo contiene.
+	 *
+	 * Escenario:
+	 * - Jugador inicia en (1,1) con 2 vidas.
+	 * - En la celda adyacente (1,2) hay un power-up de vida (LIFE_UP).
+	 * - El jugador se mueve a (1,2).
+	 *
+	 * Comprobaciones:
+	 * - El jugador aumenta su número de vidas (de 2 a 3).
+	 * - El power-up desaparece del tablero.
+	 * - El movimiento es exitoso.
+	 */
+	@Test
+	void testPlayerAutomaticallyCollectsPowerUpOnMove() {
+		GameConfig config = new GameConfig(300, 3);
+		Player player = new Player(1, 1, 2, "AutoCollector", 1);
+		List<Player> players = List.of(player);
+
+		GameMap map = GameMap.createDefaultMap(1);
+		GameBoard board = new GameBoard(config, players, map);
+
+		// Crear power-up en (1,2)
+		LifeUpPowerUp powerUp = new LifeUpPowerUp(1);
+		powerUp.setPosition(1, 2);
+		board.getPowerUps().add(powerUp);
+		map.getCell(1, 2).setPowerUp(powerUp);
+
+		// Ubicar jugador en (1,1)
+		map.placePlayer(1, 1, player);
+
+		// Ejecutar movimiento a la celda con power-up
+		boolean moved = board.movePlayer(player, 1, 2);
+
+		assertTrue(moved, "El jugador debe poder moverse a la celda libre");
+		assertEquals(3, player.getLives(), "El jugador debe haber recogido el power-up y aumentado sus vidas");
+		assertFalse(map.getCell(1, 2).hasPowerUp(), "El power-up debe ser eliminado de la celda tras la recolección");
+		assertFalse(board.getPowerUps().contains(powerUp), "El power-up debe ser eliminado del tablero");
+	}
 
 
 
