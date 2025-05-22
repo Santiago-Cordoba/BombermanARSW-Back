@@ -2,6 +2,9 @@ package bomberman.arsw.Socket;
 
 import bomberman.arsw.Model.*;
 import bomberman.arsw.Service.roomService;
+import org.springframework.dao.DataAccessException;
+import org.springframework.data.redis.core.RedisOperations;
+import org.springframework.data.redis.core.SessionCallback;
 import org.springframework.messaging.handler.annotation.MessageMapping;
 import org.springframework.messaging.simp.SimpMessagingTemplate;
 import org.springframework.stereotype.Controller;
@@ -32,42 +35,37 @@ public class WebSocketController {
 
     @MessageMapping("/room/{roomCode}/join")
     public void joinRoom(@DestinationVariable String roomCode, @Payload PlayerJoinRequest request) {
-        // Cargar sala existente desde Redis
+        // Siempre cargar primero desde Redis
         Room existingRoom = roomService.loadRoomFromRedis(roomCode);
 
-        // Verificar si el jugador ya existe
+        // Verificar jugador existente
         if (existingRoom != null && existingRoom.getPlayers().stream()
                 .anyMatch(p -> p.getName().equals(request.getPlayerName()))) {
             throw new IllegalArgumentException("Ya existe un jugador con ese nombre en la sala");
         }
 
-        Player player = new Player(
-                0,  // x position
-                0,  // y position
-                3,  // lives
-                request.getPlayerName(),  // name
-                1   // bomb capacity
-        );
+        Player player = new Player(0, 0, 3, request.getPlayerName(), 1);
 
-        boolean isFirstPlayer = false;
+        // Operación atómica usando Redis
+        redisTemplate.execute(new SessionCallback<>() {
+            @Override
+            public Object execute(RedisOperations operations) throws DataAccessException {
+                operations.watch("room:players:" + roomCode);
 
-        if (existingRoom != null) {
-            // Sala existe en Redis
-            isFirstPlayer = existingRoom.getPlayers().isEmpty();
-            player.setHost(isFirstPlayer);
+                Room room = (Room) operations.opsForValue().get("room:players:" + roomCode);
+                boolean isFirstPlayer = (room == null || room.getPlayers().isEmpty());
+                player.setHost(isFirstPlayer);
 
-            // Añadir el jugador a la sala existente
-            roomService.addPlayerToRoom(roomCode, player);
+                operations.multi();
+                if (room == null) {
+                    room = new Room(roomCode);
+                }
+                room.addPlayer(player);
+                operations.opsForValue().set("room:players:" + roomCode, room);
 
-            // Guardar la sala actualizada en Redis
-            roomService.saveRoomToRedis(roomCode, roomService.getRoom(roomCode).orElseThrow());
-        } else {
-            // Sala nueva
-            isFirstPlayer = roomService.getPlayersInRoom(roomCode).isEmpty();
-            player.setHost(isFirstPlayer);
-            roomService.addPlayerToRoom(roomCode, player);
-            roomService.saveRoomToRedis(roomCode, roomService.getRoom(roomCode).orElseThrow());
-        }
+                return operations.exec();
+            }
+        });
 
         sendRoomUpdate(roomCode);
     }
