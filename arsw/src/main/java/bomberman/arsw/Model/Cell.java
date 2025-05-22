@@ -1,44 +1,69 @@
 package bomberman.arsw.Model;
 
+import com.fasterxml.jackson.annotation.JsonCreator;
+import com.fasterxml.jackson.annotation.JsonIgnore;
+import com.fasterxml.jackson.annotation.JsonProperty;
+import java.io.Serializable;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.stream.Collectors;
 
-public class Cell {
+public class Cell implements Serializable {
+    private static final long serialVersionUID = 1L;
+
     private final int x;
     private final int y;
+    @JsonProperty("isWall")
     private boolean isWall;
     private Bomb bomb;
     private PowerUp powerUp;
     private List<Player> players;
     private boolean destructible;
 
-
-
-    public Cell(int x, int y) {
+    @JsonCreator
+    public Cell(@JsonProperty("x") int x,
+                @JsonProperty("y") int y,
+                @JsonProperty("isWall") boolean isWall,
+                @JsonProperty("bomb") Bomb bomb,
+                @JsonProperty("powerUp") PowerUp powerUp,
+                @JsonProperty("players") List<Player> players,
+                @JsonProperty("destructible") boolean destructible) {
         this.x = x;
         this.y = y;
-        this.isWall = false;
-        this.players = new ArrayList<>();
+        this.isWall = isWall;
+        this.bomb = bomb;
+        this.powerUp = powerUp;
+        this.players = players != null ? new ArrayList<>(players) : new ArrayList<>();
+        this.destructible = destructible;
+    }
+
+    // Constructor simplificado para uso normal
+    public Cell(int x, int y) {
+        this(x, y, false, null, null, new ArrayList<>(), false);
     }
 
     // Métodos para verificar el estado de la celda
+    @JsonIgnore
     public boolean hasBomb() {
         return bomb != null;
     }
 
+    @JsonIgnore
     public boolean hasPowerUp() {
         return powerUp != null;
     }
 
+    @JsonIgnore
     public boolean hasPlayer() {
         return !players.isEmpty();
     }
+
 
     public boolean isWall() {
         return isWall;
     }
 
+    @JsonIgnore
     public boolean isEmpty() {
         return !isWall && !hasBomb() && !hasPlayer();
     }
@@ -47,7 +72,6 @@ public class Cell {
     public void setWall(boolean isWall) {
         this.isWall = isWall;
         if (isWall) {
-            // Si se convierte en pared, eliminar otros elementos
             this.bomb = null;
             this.powerUp = null;
             this.players.clear();
@@ -57,12 +81,6 @@ public class Cell {
     public void setBomb(Bomb bomb) {
         if (!isWall) {
             this.bomb = bomb;
-        }
-    }
-
-    public void addPowerUp(PowerUp powerUp) {
-        if (!isWall) {
-            this.powerUp = powerUp;
         }
     }
 
@@ -82,46 +100,38 @@ public class Cell {
         }
     }
 
+    @JsonIgnore
     public boolean hasCollectiblePowerUp() {
         return powerUp != null && !isWall && !hasBomb();
     }
 
-
-
-    public String toJsonString() {
-        return String.format(
-                "{\"x\":%d,\"y\":%d,\"isWall\":%b,\"hasBomb\":%b,\"hasPowerUp\":%b,\"players\":%s}",
-                x,
-                y,
-                isWall,
-                bomb != null,
-                powerUp != null,
-                players.stream().map(Player::getId).collect(Collectors.joining("\",\"", "[\"", "\"]")),
-                isDestructible()
-        );
-    }
-
-    // Getters
+    // Getters con @JsonProperty
+    @JsonProperty
     public int getX() {
         return x;
     }
 
+    @JsonProperty
     public int getY() {
         return y;
     }
 
+    @JsonProperty
     public Bomb getBomb() {
         return bomb;
     }
 
+    @JsonProperty
     public PowerUp getPowerUp() {
         return powerUp;
     }
 
+    @JsonProperty
     public List<Player> getPlayers() {
         return new ArrayList<>(players);
     }
 
+    @JsonProperty
     public boolean isDestructible() {
         return destructible;
     }
@@ -130,11 +140,12 @@ public class Cell {
         this.destructible = destructible;
     }
 
+    @JsonIgnore
     public void removePowerUp() {
-        PowerUp removedPowerUp = this.powerUp;
         this.powerUp = null;
     }
 
+    @JsonIgnore
     public boolean collectPowerUp(Player player) {
         if (powerUp != null && player != null) {
             powerUp.applyEffect(player);
@@ -144,5 +155,27 @@ public class Cell {
         return false;
     }
 
+    // Método para serialización personalizada
+    @JsonIgnore
+    public String toJsonString() {
+        return String.format(
+                "{\"x\":%d,\"y\":%d,\"isWall\":%b,\"hasBomb\":%b,\"hasPowerUp\":%b,\"players\":%s,\"destructible\":%b}",
+                x, y, isWall, hasBomb(), hasPowerUp(),
+                players.stream().map(Player::getId).collect(Collectors.joining("\",\"", "[\"", "\"]")),
+                destructible
+        );
+    }
 
+    @Override
+    public String toString() {
+        return "Cell{" +
+                "x=" + x +
+                ", y=" + y +
+                ", isWall=" + isWall +
+                ", bomb=" + (bomb != null) +
+                ", powerUp=" + (powerUp != null) +
+                ", players=" + players.size() +
+                ", destructible=" + destructible +
+                '}';
+    }
 }

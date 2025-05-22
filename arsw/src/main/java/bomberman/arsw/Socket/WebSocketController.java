@@ -8,115 +8,304 @@ import org.springframework.stereotype.Controller;
 import org.springframework.messaging.handler.annotation.Payload;
 import org.springframework.messaging.handler.annotation.DestinationVariable;
 import org.springframework.beans.factory.annotation.Autowired;
+import org.springframework.data.redis.core.RedisTemplate;
 
-import java.util.List;
-import java.util.Map;
-import java.util.HashMap;
+import java.io.Serializable;
+import java.util.*;
 import java.util.stream.Collectors;
 
 @Controller
 public class WebSocketController {
     private final roomService roomService;
     private final SimpMessagingTemplate messagingTemplate;
+    private final RedisTemplate<String, Object> redisTemplate;
 
     @Autowired
-    public WebSocketController(roomService roomService, SimpMessagingTemplate messagingTemplate) {
+    public WebSocketController(roomService roomService,
+                               SimpMessagingTemplate messagingTemplate,
+                               RedisTemplate<String, Object> redisTemplate) {
         this.roomService = roomService;
         this.messagingTemplate = messagingTemplate;
+        this.redisTemplate = redisTemplate;
     }
+
 
     @MessageMapping("/room/{roomCode}/join")
     public void joinRoom(@DestinationVariable String roomCode, @Payload PlayerJoinRequest request) {
-        Player player = new Player(
+        // Cargar sala existente desde Redis
+        Room existingRoom = roomService.loadRoomFromRedis(roomCode);
 
-                0,  // initial X position
-                0,  // initial Y position
-                1,  // initial lives
-                request.getPlayerName(),
-                1   // initial bomb capacity
+        // Verificar si el jugador ya existe
+        if (existingRoom != null && existingRoom.getPlayers().stream()
+                .anyMatch(p -> p.getName().equals(request.getPlayerName()))) {
+            throw new IllegalArgumentException("Ya existe un jugador con ese nombre en la sala");
+        }
+
+        Player player = new Player(
+                0,  // x position
+                0,  // y position
+                3,  // lives
+                request.getPlayerName(),  // name
+                1   // bomb capacity
         );
 
-        boolean isFirstPlayer = roomService.getPlayersInRoom(roomCode).isEmpty();
-        player.setHost(isFirstPlayer);
+        boolean isFirstPlayer = false;
 
-        roomService.addPlayerToRoom(roomCode, player);
+        if (existingRoom != null) {
+            // Sala existe en Redis
+            isFirstPlayer = existingRoom.getPlayers().isEmpty();
+            player.setHost(isFirstPlayer);
 
-        // Enviar actualización a todos los jugadores de la sala
+            // Añadir el jugador a la sala existente
+            roomService.addPlayerToRoom(roomCode, player);
+
+            // Guardar la sala actualizada en Redis
+            roomService.saveRoomToRedis(roomCode, roomService.getRoom(roomCode).orElseThrow());
+        } else {
+            // Sala nueva
+            isFirstPlayer = roomService.getPlayersInRoom(roomCode).isEmpty();
+            player.setHost(isFirstPlayer);
+            roomService.addPlayerToRoom(roomCode, player);
+            roomService.saveRoomToRedis(roomCode, roomService.getRoom(roomCode).orElseThrow());
+        }
+
         sendRoomUpdate(roomCode);
     }
 
     @MessageMapping("/room/{roomCode}/ready")
     public void toggleReady(@DestinationVariable String roomCode, @Payload PlayerActionRequest request) {
         roomService.togglePlayerReadyStatus(roomCode, request.getPlayerId());
+        saveRoomStateToRedis(roomCode);
         sendRoomUpdate(roomCode);
     }
 
     @MessageMapping("/room/{roomCode}/start")
     public void startGame(@DestinationVariable String roomCode, @Payload Map<String, Object> payload) {
-        System.out.println("Received start request: " + payload); // Debug
-
         String playerId = (String) payload.get("playerId");
-
         Map<String, Object> configPayload = (Map<String, Object>) payload.get("config");
-        int duration = configPayload != null ? (int) configPayload.get("duration") : 300; // Default 5 min
-        int lives = configPayload != null ? (int) configPayload.get("lives") : 5; // Default 3 vidas
+        int duration = configPayload != null ? (int) configPayload.get("duration") : 300;
+        int lives = configPayload != null ? (int) configPayload.get("lives") : 3;
 
         if (roomService.isHost(roomCode, playerId) && roomService.canStartGame(roomCode)) {
-            // 1. Crear configuración
-            GameConfig config = new GameConfig(duration, lives); // 5 min, 3 vidas
-
-            // 2. Obtener jugadores
+            GameConfig config = new GameConfig(duration, lives);
             List<Player> players = roomService.getPlayersInRoom(roomCode);
-
-            // 3. Crear tablero (esto ahora crea el mapa internamente)
             roomService.createGameBoard(roomCode, config, players);
-
             players.forEach(p -> p.setLives(config.getLives()));
 
-            // 4. Obtener tablero creado
             GameBoard board = roomService.getGameBoard(roomCode);
             if (board == null) {
                 throw new IllegalStateException("Game board not initialized for room: " + roomCode);
             }
 
-            // 5. Formatear jugadores como Map (suponiendo que tienes un método toMap())
+            // Guardar estado completo en Redis
+            saveGameStateToRedis(roomCode, board);
+
             List<Map<String, Object>> playersData = players.stream()
                     .map(Player::toMap)
                     .toList();
 
-            // 6. Formatear mapa
             GameMap gameMap = board.getGameMap();
             Map<String, Object> mapData = new HashMap<>();
             mapData.put("width", gameMap.getWidth());
             mapData.put("height", gameMap.getHeight());
             mapData.put("cells", gameMap.getCellStates());
 
-            // 7. Formatear configuración como Map (opcional si el frontend no acepta el objeto Java tal cual)
             Map<String, Object> configData = new HashMap<>();
             configData.put("duration", config.getDuration());
             configData.put("lives", config.getLives());
 
-            // 8. Armar mensaje completo
             Map<String, Object> response = new HashMap<>();
             response.put("type", "GAME_START");
             response.put("config", configData);
             response.put("players", playersData);
             response.put("map", mapData);
 
-            // 9. Enviar mensaje a los clientes
             messagingTemplate.convertAndSend("/topic/room/" + roomCode, response);
             messagingTemplate.convertAndSend("/topic/game/" + roomCode, response);
         }
     }
 
-
-
     @MessageMapping("/room/{roomCode}/leave")
     public void leaveRoom(@DestinationVariable String roomCode, @Payload PlayerActionRequest request) {
         roomService.removePlayerFromRoom(roomCode, request.getPlayerId());
+        saveRoomStateToRedis(roomCode);
         sendRoomUpdate(roomCode);
     }
 
+    @MessageMapping("/game/{roomCode}/move")
+    public void handlePlayerMove(
+            @DestinationVariable String roomCode,
+            @Payload PlayerMoveRequest request) {
+
+        GameBoard board = loadGameStateFromRedis(roomCode);
+        if (board == null) {
+            board = roomService.getGameBoard(roomCode);
+        }
+
+        if (board != null) {
+            synchronized (board) {
+                Player player = board.getPlayerById(request.getPlayerId());
+                if (player != null && board.movePlayer(player, request.getNewX(), request.getNewY())) {
+                    // Guardar el estado actualizado en Redis
+                    saveGameStateToRedis(roomCode, board);
+
+                    sendGameUpdate(roomCode, board);
+                }
+            }
+        }
+    }
+
+
+    @MessageMapping("/game/{roomCode}/placeBomb")
+    public void handlePlaceBomb(
+            @DestinationVariable String roomCode,
+            @Payload PlayerActionRequest request) {
+
+        GameBoard board = loadGameStateFromRedis(roomCode);
+        if (board == null) {
+            board = roomService.getGameBoard(roomCode);
+        }
+
+        if (board != null) {
+            Player player = board.getPlayerById(request.getPlayerId());
+            if (player != null && player.canPlaceBomb()) {
+                if (!board.getGameMap().getCell(player.getX(), player.getY()).hasBomb()) {
+                    Bomb bomb = new Bomb(player.getX(), player.getY(), player);
+                    board.addBomb(bomb);
+                    board.getGameMap().placeBomb(player.getX(), player.getY(), bomb);
+
+                    saveGameStateToRedis(roomCode, board);
+                    sendGameUpdate(roomCode, board);
+
+                    // Programar la explosión
+                    scheduleBombExplosion(roomCode, bomb.getId());
+                }
+            }
+        }
+    }
+
+    private void scheduleBombExplosion(String roomCode, String bombId) {
+        new Timer().schedule(new TimerTask() {
+            @Override
+            public void run() {
+                handleBombExplosion(roomCode, bombId);
+            }
+        }, 2000); // 2 segundos
+    }
+
+
+    @MessageMapping("/game/{roomCode}/collectPowerUp")
+    public void handleCollectPowerUp(
+            @DestinationVariable String roomCode,
+            @Payload Map<String, Object> payload) {
+
+        GameBoard board = roomService.getGameBoard(roomCode);
+        if (board != null) {
+            String playerId = (String) payload.get("playerId");
+            int x = (int) payload.get("x");
+            int y = (int) payload.get("y");
+
+            if (board.collectPowerUp(playerId, x, y)) {
+                saveGameStateToRedis(roomCode, board);
+                broadcastGameState(roomCode, board);
+            }
+        }
+    }
+
+    @MessageMapping("/room/{roomCode}/status")
+    public void getGameStatus(@DestinationVariable String roomCode) {
+        // Intentar cargar desde Redis primero
+        GameBoard board = loadGameStateFromRedis(roomCode);
+        if (board == null) {
+            board = roomService.getGameBoard(roomCode);
+        }
+
+        if (board != null) {
+            messagingTemplate.convertAndSend("/topic/room/" + roomCode,
+                    Map.of(
+                            "type", "GAME_START",
+                            "config", board.getConfig(),
+                            "players", board.getPlayers()
+                    )
+            );
+        }
+    }
+
+    @MessageMapping("/game/{roomCode}/init")
+    public void initGame(
+            @DestinationVariable String roomCode,
+            @Payload Map<String, Object> request) {
+
+        // Cargar estado desde Redis
+        GameBoard board = loadGameStateFromRedis(roomCode);
+        if (board == null) {
+            board = roomService.getGameBoard(roomCode);
+        }
+
+        if (board != null) {
+            Map<String, Object> response = new HashMap<>();
+            response.put("type", "GAME_UPDATE");
+            response.put("state", Map.of(
+                    "players", board.getPlayers().stream().map(p -> Map.of(
+                            "id", p.getId(),
+                            "name", p.getName(),
+                            "x", p.getX(),
+                            "y", p.getY(),
+                            "lives", p.getLives(),
+                            "bombCapacity", p.getBombCapacity(),
+                            "bombRange", p.getBombRange()
+                    )).collect(Collectors.toList()),
+                    "map", Map.of(
+                            "width", board.getGameMap().getWidth(),
+                            "height", board.getGameMap().getHeight(),
+                            "cells", board.getGameMap().getCellStates()
+                    ),
+                    "config", Map.of(
+                            "duration", board.getConfig().getDuration(),
+                            "lives", board.getConfig().getLives()
+                    ),
+                    "bombs", board.getBombs().stream().map(b -> Map.of(
+                            "id", b.getId(),
+                            "x", b.getX(),
+                            "y", b.getY(),
+                            "timer", b.getTimer(),
+                            "range", b.getRange(),
+                            "playerId", b.getPlayerId()
+                    )).collect(Collectors.toList()),
+                    "powerUps", board.getPowerUps().stream().map(pu -> Map.of(
+                            "type", pu.getType().name(),
+                            "x", pu.getX(),
+                            "y", pu.getY()
+                    )).collect(Collectors.toList())
+            ));
+
+            messagingTemplate.convertAndSend("/topic/game/" + roomCode, response);
+        }
+    }
+
+    // Métodos auxiliares para Redis
+    private void saveRoomStateToRedis(String roomCode) {
+        List<Player> players = roomService.getPlayersInRoom(roomCode);
+        redisTemplate.opsForValue().set("room:players:" + roomCode, (Serializable) players);
+    }
+
+    private void loadRoomStateFromRedis(String roomCode) {
+        List<Player> players = (List<Player>) redisTemplate.opsForValue().get("room:players:" + roomCode);
+        if (players != null && !players.isEmpty()) {
+            // Restaurar jugadores en la sala
+            players.forEach(p -> roomService.addPlayerToRoom(roomCode, p));
+        }
+    }
+
+    private void saveGameStateToRedis(String roomCode, GameBoard board) {
+        redisTemplate.opsForValue().set("game:state:" + roomCode, board);
+    }
+
+    private GameBoard loadGameStateFromRedis(String roomCode) {
+        return (GameBoard) redisTemplate.opsForValue().get("game:state:" + roomCode);
+    }
+
+    // Métodos auxiliares para enviar actualizaciones
     private void sendRoomUpdate(String roomCode) {
         List<Player> players = roomService.getPlayersInRoom(roomCode);
         String hostId = players.isEmpty() ? "" : players.get(0).getId();
@@ -129,43 +318,7 @@ public class WebSocketController {
         messagingTemplate.convertAndSend("/topic/room/" + roomCode, response);
     }
 
-    @MessageMapping("/room/{roomCode}/status")
-    public void getGameStatus(@DestinationVariable String roomCode) {
-        GameBoard board = roomService.getGameBoard(roomCode);
-        if (board != null) {
-            messagingTemplate.convertAndSend("/topic/room/" + roomCode,
-                    Map.of(
-                            "type", "GAME_START",
-                            "config", board.getConfig(),
-                            "players", board.getPlayers()
-                    )
-            );
-        }
-    }
-
-    @MessageMapping("/game/{roomCode}/move")
-    public void handlePlayerMove(
-            @DestinationVariable String roomCode,
-            @Payload PlayerMoveRequest request) {
-
-        GameBoard board = roomService.getGameBoard(roomCode);
-        if (board != null) {
-            synchronized (board) {
-                Player player = board.getPlayerById(request.getPlayerId());
-                if (player != null && board.movePlayer(player, request.getNewX(), request.getNewY())) {
-                    System.out.println(
-                            "[BROADCAST] Jugador " + player.getName() +
-                                    " movido a (" + request.getNewX() + ", " + request.getNewY() + ")" +
-                                    " en sala: " + roomCode
-                    );
-                    broadcastGameState2(roomCode, board); // Enviar nuevo estado del juego
-                }
-            }
-        }
-    }
-
-
-    private void broadcastGameState2(String roomCode, GameBoard board) {
+    private void broadcastGameState(String roomCode, GameBoard board) {
         Map<String, Object> response = new HashMap<>();
         response.put("type", "GAME_UPDATE");
         response.put("players", board.getPlayers().stream()
@@ -174,8 +327,9 @@ public class WebSocketController {
                         "name", p.getName(),
                         "x", p.getX(),
                         "y", p.getY(),
-                        "lives", p.getLives(), // Añadir vidas
-                        "bombCapacity", p.getBombCapacity()
+                        "lives", p.getLives(),
+                        "bombCapacity", p.getBombCapacity(),
+                        "bombRange", p.getBombRange()
                 ))
                 .collect(Collectors.toList()));
         response.put("map", board.getGameMap().getCellStates());
@@ -190,21 +344,6 @@ public class WebSocketController {
         messagingTemplate.convertAndSend("/topic/game/" + roomCode, response);
     }
 
-    @MessageMapping("/game/{roomCode}/placeBomb")
-    public void handlePlaceBomb(
-            @DestinationVariable String roomCode,
-            @Payload PlayerActionRequest request) {
-
-        GameBoard board = roomService.getGameBoard(roomCode);
-        if (board != null) {
-            Player player = board.getPlayerById(request.getPlayerId());
-            if (player != null) {
-                // Colocar la bomba
-                board.placeBomb(player.getX(), player.getY(), player);
-                sendGameUpdate(roomCode, board);
-            }
-        }
-    }
     private void sendGameUpdate(String roomCode, GameBoard board) {
         messagingTemplate.convertAndSend("/topic/game/" + roomCode, Map.of(
                 "type", "GAME_UPDATE",
@@ -220,13 +359,14 @@ public class WebSocketController {
                         ))
                         .collect(Collectors.toList()),
                 "bombs", board.getBombs().stream()
+                        .filter(b -> !b.shouldExplode())
                         .map(b -> Map.of(
-                                "id", b.getId(), // ¡Nuevo campo!
+                                "id", b.getId(),
                                 "x", b.getX(),
                                 "y", b.getY(),
-                                "timer", b.getTimer(),
-                                "range", b.getRange(), // ¡Nuevo campo!
-                                "playerId", b.getPlayerId() // ¡Nuevo campo!
+                                "timer", (2000 - (System.currentTimeMillis() - b.getCreationTime())) / 1000.0,
+                                "range", b.getRange(),
+                                "playerId", b.getPlayerId()
                         ))
                         .collect(Collectors.toList()),
                 "map", board.getGameMap().getCellStates(),
@@ -240,64 +380,67 @@ public class WebSocketController {
         ));
     }
 
-    private void broadcastGameState(String roomCode, GameBoard board) {
-        messagingTemplate.convertAndSend("/topic/game/" + roomCode, Map.of(
-                "type", "GAME_UPDATE",
-                "state", board.getGameStateJson()
-        ));
-    }
+    private void handleBombExplosion(String roomCode, String bombId) {
+        GameBoard board = loadGameStateFromRedis(roomCode);
+        if (board == null) return;
 
+        synchronized (board) {
+            Bomb bomb = board.getBombs().stream()
+                    .filter(b -> b.getId().equals(bombId))
+                    .findFirst()
+                    .orElse(null);
 
-    @MessageMapping("/game/{roomCode}/init")
-    public void initGame(
-            @DestinationVariable String roomCode,
-            @Payload Map<String, Object> request) {
+            if (bomb != null) {
+                // 1. Eliminar la bomba
+                board.getBombs().remove(bomb);
+                board.getGameMap().removeBomb(bomb.getX(), bomb.getY());
 
-        GameBoard board = roomService.getGameBoard(roomCode);
-        if (board != null) {
-            // Enviar estado completo del juego
-            Map<String, Object> response = new HashMap<>();
-            response.put("type", "GAME_UPDATE");
-            response.put("state", Map.of(
-                    "players", board.getPlayers().stream().map(p -> Map.of(
-                            "id", p.getId(),
-                            "name", p.getName(),
-                            "x", p.getX(),
-                            "y", p.getY(),
-                            "lives", p.getLives()
-                    )).collect(Collectors.toList()),
-                    "map", Map.of(
-                            "width", board.getGameMap().getWidth(),
-                            "height", board.getGameMap().getHeight(),
-                            "cells", board.getGameMap().getCellStates()
-                    ),
-                    "config", Map.of(
-                            "duration", board.getConfig().getDuration(),
-                            "lives", board.getConfig().getLives()
-                    )
-            ));
+                // 2. Restaurar capacidad del jugador
+                Player owner = board.getPlayerById(bomb.getPlayerId());
+                if (owner != null) {
+                    owner.increaseBombCapacity();
+                }
 
-            messagingTemplate.convertAndSend("/topic/game/" + roomCode, response);
-        }
-    }
+                // 3. Aplicar daño en el área
+                applyExplosionDamage(board, bomb.getX(), bomb.getY(), bomb.getRange());
 
-    @MessageMapping("/game/{roomCode}/collectPowerUp")
-    public void handleCollectPowerUp(
-            @DestinationVariable String roomCode,
-            @Payload Map<String, Object> payload) {
-
-        GameBoard board = roomService.getGameBoard(roomCode);
-        if (board != null) {
-            String playerId = (String) payload.get("playerId");
-            int x = (int) payload.get("x");
-            int y = (int) payload.get("y");
-
-            if (board.collectPowerUp(playerId, x, y)) {
-                broadcastGameState2(roomCode, board);
+                // 4. Guardar y notificar
+                saveGameStateToRedis(roomCode, board);
+                sendGameUpdate(roomCode, board);
             }
         }
     }
 
+    private void applyExplosionDamage(GameBoard board, int x, int y, int range) {
+        // Implementa la lógica de daño en el área
+        // Esto debería afectar jugadores y paredes destructibles
+        // Por ejemplo:
+        for (int dx = -range; dx <= range; dx++) {
+            for (int dy = -range; dy <= range; dy++) {
+                if (dx == 0 || dy == 0) { // Solo en cruz
+                    checkExplosionCell(board, x + dx, y + dy);
+                }
+            }
+        }
+    }
 
+    private void checkExplosionCell(GameBoard board, int x, int y) {
+        if (!board.getGameMap().isValidPosition(x, y)) return;
 
+        Cell cell = board.getGameMap().getCell(x, y);
+
+        // Dañar jugadores
+        cell.getPlayers().forEach(player -> {
+            player.increaseLives(-1);
+            if (player.getLives() <= 0) {
+                board.getPlayers().remove(player);
+            }
+        });
+
+        // Destruir paredes
+        if (cell.isWall() && cell.isDestructible()) {
+            cell.setWall(false);
+            // Posiblemente generar power-up aquí
+        }
+    }
 }

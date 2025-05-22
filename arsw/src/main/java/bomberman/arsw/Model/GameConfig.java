@@ -1,28 +1,27 @@
 package bomberman.arsw.Model;
 
-public class GameConfig {
-    private int duration;
-    private int lives;
+import com.fasterxml.jackson.annotation.JsonCreator;
+import com.fasterxml.jackson.annotation.JsonProperty;
+import java.io.Serializable;
 
-    public GameConfig(int durationSeconds, int lives) {
-        this.duration = durationSeconds;
+public class GameConfig implements Serializable {
+    private static final long serialVersionUID = 1L;
+
+    private final int duration;
+    private final int lives;
+
+    @JsonCreator
+    public GameConfig(@JsonProperty("duration") int duration,
+                      @JsonProperty("lives") int lives) {
+        this.duration = duration;
         this.lives = lives;
     }
 
-    // Getters
-    public int getDuration() {
-        return duration;
-    }
+    @JsonProperty
+    public int getDuration() { return duration; }
 
-    public int getLives() {
-        return lives;
-    }
+    @JsonProperty
+    public int getLives() { return lives; }
 
-    public String toJsonString() {
-        return String.format(
-                "{\"duration\":%d,\"initialLives\":%d}",
-                duration,
-                lives
-        );
-    }
+
 }

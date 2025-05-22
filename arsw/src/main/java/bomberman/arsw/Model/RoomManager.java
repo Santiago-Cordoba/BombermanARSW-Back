@@ -27,7 +27,12 @@ public class RoomManager {
         return rooms.containsKey(code);
     }
 
-    // Nuevo método añadido para sincronización con Redis
+    // Método añadido para agregar una sala existente
+    public synchronized void addRoom(String code, Room room) {
+        rooms.put(code, room);
+    }
+
+    // Método para actualizar jugadores (ya existía)
     public synchronized void updateRoomPlayers(String roomCode, List<Player> players) {
         Room room = rooms.get(roomCode);
         if (room != null) {

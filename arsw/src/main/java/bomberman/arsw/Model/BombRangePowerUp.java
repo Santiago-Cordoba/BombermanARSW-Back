@@ -1,6 +1,11 @@
 package bomberman.arsw.Model;
 
 public class BombRangePowerUp extends PowerUp {
+
+    public BombRangePowerUp() {
+        super(PowerUpType.BOMB_RANGE_UP, 0, 0); // valores por defecto
+    }
+
     public BombRangePowerUp(int x, int y) {
         super(PowerUpType.BOMB_RANGE_UP, x, y);
     }

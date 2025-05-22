@@ -1,6 +1,7 @@
 package bomberman.arsw.Service;
 
 import bomberman.arsw.Model.*;
+import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.data.redis.core.RedisTemplate;
 import org.springframework.stereotype.Service;
 
@@ -9,47 +10,68 @@ import java.util.concurrent.TimeUnit;
 
 @Service
 public class roomService {
-
     private final RoomManager roomManager;
-    private final RedisTemplate<String, GameBoard> gameBoardRedisTemplate;
-    private final RedisTemplate<String, Room> roomRedisTemplate;
-    private final Map<String, GameBoard> activeBoards = new HashMap<>();
+    private final RedisTemplate<String, Object> redisTemplate;
 
-    // Tiempo de expiración para los datos en Redis (1 día)
-    private static final long REDIS_EXPIRATION_TIME = 24;
-    private static final TimeUnit REDIS_EXPIRATION_UNIT = TimeUnit.HOURS;
+    // Tiempo de vida para las entradas en Redis (24 horas)
+    private static final long ROOM_TTL = 24 * 60 * 60;
 
-    public roomService(RoomManager roomManager,
-                       RedisTemplate<String, GameBoard> gameBoardRedisTemplate,
-                       RedisTemplate<String, Room> roomRedisTemplate) {
+    @Autowired
+    public roomService(RoomManager roomManager, RedisTemplate<String, Object> redisTemplate) {
         this.roomManager = roomManager;
-        this.gameBoardRedisTemplate = gameBoardRedisTemplate;
-        this.roomRedisTemplate = roomRedisTemplate;
+        this.redisTemplate = redisTemplate;
     }
 
     public Room createOrGetRoom(String roomCode) {
-        // Primero intentar cargar desde Redis
-        Room cachedRoom = loadRoomState(roomCode);
-        if (cachedRoom != null) {
-            roomManager.getOrCreateRoom(roomCode).setPlayers(cachedRoom.getPlayers());
+        // Primero intenta cargar desde Redis
+        Room room = loadRoomFromRedis(roomCode);
+        if (room != null) {
+            roomManager.addRoom(roomCode, room);
+            return room;
         }
-        return roomManager.getOrCreateRoom(roomCode);
+
+        // Si no existe en Redis, crea una nueva
+        Room newRoom = roomManager.getOrCreateRoom(roomCode);
+        saveRoomToRedis(roomCode, newRoom);
+        return newRoom;
     }
 
     public Optional<Room> getRoom(String roomCode) {
-        // Primero intentar cargar desde Redis
-        Room cachedRoom = loadRoomState(roomCode);
-        if (cachedRoom != null) {
-            return Optional.of(cachedRoom);
+        // Primero verifica en memoria
+        Optional<Room> roomOpt = Optional.ofNullable(roomManager.getRoom(roomCode));
+        if (roomOpt.isPresent()) {
+            return roomOpt;
         }
-        return Optional.ofNullable(roomManager.getRoom(roomCode));
+
+        // Si no está en memoria, busca en Redis
+        Room redisRoom = loadRoomFromRedis(roomCode);
+        if (redisRoom != null) {
+            roomManager.addRoom(roomCode, redisRoom);
+            return Optional.of(redisRoom);
+        }
+
+        return Optional.empty();
     }
 
     public void createGameBoard(String roomCode, GameConfig config, List<Player> players) {
+        // Crear el mapa primero
         GameMap gameMap = GameMap.createDefaultMap(players.size());
+
+        // Luego crear el tablero con el mapa
         GameBoard board = new GameBoard(config, players, gameMap);
-        activeBoards.put(roomCode, board);
+
+        // Guardar el tablero en Redis
+        saveGameBoardToRedis(roomCode, board);
+
+        // Posicionar jugadores en el mapa
         positionPlayers(board, players);
+
+        // Actualizar la sala en Redis con el nuevo tablero
+        Optional<Room> roomOpt = getRoom(roomCode);
+        roomOpt.ifPresent(room -> {
+            room.setGameBoard(board);
+            saveRoomToRedis(roomCode, room);
+        });
     }
 
     private void positionPlayers(GameBoard board, List<Player> players) {
@@ -61,7 +83,7 @@ public class roomService {
                 {1, 1},
                 {width-2, height-2},
                 {width-2, 1},
-                {1, height-2},
+                {1, height-2}
         };
 
         for (int i = 0; i < players.size(); i++) {
@@ -73,23 +95,21 @@ public class roomService {
     }
 
     public GameBoard getGameBoard(String roomCode) {
-        // Primero buscar en los tableros activos
-        if (activeBoards.containsKey(roomCode)) {
-            return activeBoards.get(roomCode);
+        // Primero intenta obtener de Redis
+        GameBoard board = loadGameBoardFromRedis(roomCode);
+        if (board != null) {
+            return board;
         }
 
-        // Si no está en memoria, cargar desde Redis
-        GameBoard board = gameBoardRedisTemplate.opsForValue().get(roomCode);
-        if (board != null) {
-            activeBoards.put(roomCode, board);
-        }
-        return board;
+        // Si no está en Redis, busca en el roomManager
+        Optional<Room> roomOpt = getRoom(roomCode);
+        return roomOpt.map(Room::getGameBoard).orElse(null);
     }
 
     public boolean addPlayerToRoom(String roomCode, Player player) {
-        Room room = roomManager.getOrCreateRoom(roomCode);
+        Room room = createOrGetRoom(roomCode);
         room.addPlayer(player);
-        saveRoomState(roomCode, room);
+        saveRoomToRedis(roomCode, room);
         return true;
     }
 
@@ -101,11 +121,12 @@ public class roomService {
 
             if (room.getPlayers().isEmpty()) {
                 roomManager.removeRoom(roomCode);
-                roomRedisTemplate.delete(roomCode);
-                gameBoardRedisTemplate.delete(roomCode);
-                activeBoards.remove(roomCode);
+                // También eliminar de Redis si la sala está vacía
+                redisTemplate.delete("room:" + roomCode);
+                redisTemplate.delete("gameboard:" + roomCode);
             } else {
-                saveRoomState(roomCode, room);
+                // Si aún hay jugadores, actualizar Redis
+                saveRoomToRedis(roomCode, room);
             }
             return true;
         }
@@ -123,11 +144,7 @@ public class roomService {
             if (playerOpt.isPresent()) {
                 Player player = playerOpt.get();
                 player.setReady(!player.isReady());
-
-                // Actualizar en Redis y en el roomManager
-                saveRoomState(roomCode, room);
-                roomManager.getOrCreateRoom(roomCode).setPlayers(room.getPlayers());
-
+                saveRoomToRedis(roomCode, room);
                 return true;
             }
         }
@@ -152,58 +169,40 @@ public class roomService {
     }
 
     public List<Player> getPlayersInRoom(String roomCode) {
-        // Primero intentar cargar desde Redis
-        Room cachedRoom = loadRoomState(roomCode);
-        if (cachedRoom != null) {
-            return cachedRoom.getPlayers();
-        }
-
-        // Si no está en Redis, cargar desde el roomManager
         return getRoom(roomCode)
                 .map(Room::getPlayers)
                 .orElse(List.of());
     }
 
-    public void saveGameState(String roomCode, GameBoard board) {
-        try {
-            gameBoardRedisTemplate.opsForValue().set(roomCode, board, REDIS_EXPIRATION_TIME, REDIS_EXPIRATION_UNIT);
-            activeBoards.put(roomCode, board);
-        } catch (Exception e) {
-            System.err.println("Error al guardar el estado del juego en Redis: " + e.getMessage());
-        }
+    // Métodos para interactuar con Redis
+
+    public void saveRoomToRedis(String roomCode, Room room) {
+        redisTemplate.opsForValue().set("room:" + roomCode, room, ROOM_TTL, TimeUnit.SECONDS);
     }
 
-    public GameBoard loadGameState(String roomCode) {
-        try {
-            GameBoard board = gameBoardRedisTemplate.opsForValue().get(roomCode);
-            if (board != null) {
-                activeBoards.put(roomCode, board);
-            }
-            return board;
-        } catch (Exception e) {
-            System.err.println("Error al cargar el estado del juego desde Redis: " + e.getMessage());
-            return null;
-        }
+    public Room loadRoomFromRedis(String roomCode) {
+        return (Room) redisTemplate.opsForValue().get("room:" + roomCode);
     }
 
-    public void setGameBoard(String roomCode, GameBoard board) {
-        activeBoards.put(roomCode, board);
+    public void saveGameBoardToRedis(String roomCode, GameBoard board) {
+        redisTemplate.opsForValue().set("gameboard:" + roomCode, board, ROOM_TTL, TimeUnit.SECONDS);
     }
 
-    private void saveRoomState(String roomCode, Room room) {
-        try {
-            roomRedisTemplate.opsForValue().set(roomCode, room, REDIS_EXPIRATION_TIME, REDIS_EXPIRATION_UNIT);
-        } catch (Exception e) {
-            System.err.println("Error al guardar el estado de la sala en Redis: " + e.getMessage());
-        }
+    public GameBoard loadGameBoardFromRedis(String roomCode) {
+        return (GameBoard) redisTemplate.opsForValue().get("gameboard:" + roomCode);
     }
 
-    private Room loadRoomState(String roomCode) {
-        try {
-            return roomRedisTemplate.opsForValue().get(roomCode);
-        } catch (Exception e) {
-            System.err.println("Error al cargar el estado de la sala desde Redis: " + e.getMessage());
-            return null;
+    // Método para restaurar una sala completa (jugadores + tablero)
+    public void restoreRoom(String roomCode, List<Player> players, GameBoard board) {
+        Room room = new Room(roomCode);
+        players.forEach(room::addPlayer);
+        room.setGameBoard(board);
+        roomManager.addRoom(roomCode, room);
+
+        // Guardar en Redis
+        saveRoomToRedis(roomCode, room);
+        if (board != null) {
+            saveGameBoardToRedis(roomCode, board);
         }
     }
 }

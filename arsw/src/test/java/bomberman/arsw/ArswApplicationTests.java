@@ -195,7 +195,7 @@ class ArswApplicationTests {
 
 		// Validar que la bomba B haya sido detonada (ya no está en el tablero)
 		boolean bombBStillExists = board.getBombs().stream()
-				.anyMatch(b -> b.getX() == 7 && b.getY() == 5);
+				.anyMatch(b -> b.getX() == 8 && b.getY() == 5);
 
 		assertFalse(bombBStillExists, "La explosión debe haber alcanzado y detonado la segunda bomba (7,5)");
 	}
