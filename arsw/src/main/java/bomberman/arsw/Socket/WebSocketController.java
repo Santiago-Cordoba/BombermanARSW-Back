@@ -35,39 +35,50 @@ public class WebSocketController {
 
     @MessageMapping("/room/{roomCode}/join")
     public void joinRoom(@DestinationVariable String roomCode, @Payload PlayerJoinRequest request) {
-        // Siempre cargar primero desde Redis
-        Room existingRoom = roomService.loadRoomFromRedis(roomCode);
-
-        // Verificar jugador existente
-        if (existingRoom != null && existingRoom.getPlayers().stream()
-                .anyMatch(p -> p.getName().equals(request.getPlayerName()))) {
-            throw new IllegalArgumentException("Ya existe un jugador con ese nombre en la sala");
-        }
-
-        Player player = new Player(0, 0, 3, request.getPlayerName(), 1);
-
-        // Operación atómica usando Redis
-        redisTemplate.execute(new SessionCallback<>() {
+        // Operación atómica con Redis
+        Boolean success = redisTemplate.execute(new SessionCallback<Boolean>() {
             @Override
-            public Object execute(RedisOperations operations) throws DataAccessException {
-                operations.watch("room:players:" + roomCode);
+            public Boolean execute(RedisOperations operations) throws DataAccessException {
+                try {
+                    operations.watch("room:players:" + roomCode);
 
-                Room room = (Room) operations.opsForValue().get("room:players:" + roomCode);
-                boolean isFirstPlayer = (room == null || room.getPlayers().isEmpty());
-                player.setHost(isFirstPlayer);
+                    Room room = (Room) operations.opsForValue().get("room:players:" + roomCode);
 
-                operations.multi();
-                if (room == null) {
-                    room = new Room(roomCode);
+                    // Verificar jugador existente
+                    if (room != null && room.getPlayers().stream()
+                            .anyMatch(p -> p.getName().equals(request.getPlayerName()))) {
+                        throw new IllegalArgumentException("Ya existe un jugador con ese nombre");
+                    }
+
+                    Player player = new Player(0, 0, 3, request.getPlayerName(), 1);
+                    boolean isFirstPlayer = (room == null || room.getPlayers().isEmpty());
+                    player.setHost(isFirstPlayer);
+
+                    operations.multi();
+                    if (room == null) {
+                        room = new Room(roomCode);
+                    }
+                    room.addPlayer(player);
+                    operations.opsForValue().set("room:players:" + roomCode, room);
+
+                    List<Object> results = operations.exec();
+                    return results != null && !results.isEmpty();
+                } catch (Exception e) {
+                    operations.discard();
+                    throw e;
                 }
-                room.addPlayer(player);
-                operations.opsForValue().set("room:players:" + roomCode, room);
-
-                return operations.exec();
             }
         });
 
-        sendRoomUpdate(roomCode);
+        if (Boolean.TRUE.equals(success)) {
+            // Actualizar la instancia local
+            Room updatedRoom = (Room) redisTemplate.opsForValue().get("room:players:" + roomCode);
+            roomService.saveRoomToRedis(roomCode, updatedRoom);
+
+            sendRoomUpdate(roomCode);
+        } else {
+            throw new IllegalStateException("No se pudo unir al jugador, intente nuevamente");
+        }
     }
 
     @MessageMapping("/room/{roomCode}/ready")

@@ -106,11 +106,10 @@ public class roomService {
         return roomOpt.map(Room::getGameBoard).orElse(null);
     }
 
-    public boolean addPlayerToRoom(String roomCode, Player player) {
-        Room room = createOrGetRoom(roomCode);
+    public void addPlayerToRoom(String roomCode, Player player) {
+        Room room = getRoom(roomCode).orElseGet(() -> new Room(roomCode));
         room.addPlayer(player);
         saveRoomToRedis(roomCode, room);
-        return true;
     }
 
     public boolean removePlayerFromRoom(String roomCode, String playerId) {
